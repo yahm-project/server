@@ -1,12 +1,9 @@
 package it.unibo.yahm.server.repositories
 
 import it.unibo.yahm.server.entities.Waypoint
-import org.neo4j.driver.Driver
 import org.neo4j.springframework.data.core.ReactiveNeo4jClient
 import org.neo4j.springframework.data.core.fetchAs
-import org.neo4j.springframework.data.repository.Neo4jRepository
 import org.neo4j.springframework.data.repository.ReactiveNeo4jRepository
-import org.neo4j.springframework.data.repository.support.SimpleNeo4jRepository
 import org.neo4j.springframework.data.types.GeographicPoint2d
 import org.springframework.stereotype.Component
 import reactor.core.publisher.Flux

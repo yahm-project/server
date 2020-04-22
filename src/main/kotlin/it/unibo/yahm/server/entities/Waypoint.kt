@@ -8,10 +8,6 @@ import org.neo4j.springframework.data.types.GeographicPoint2d
 
 @Node("waypoint")
 data class Waypoint(
-        @Id @GeneratedValue
-        val id: Long,
-        @Property("coordinates")
-        val coordinates: GeographicPoint2d,
-        val outgoings: Map<Waypoint, Segment> = emptyMap(),
-        val incoming: Map<Waypoint, Segment> = emptyMap()
+        @Id @GeneratedValue val id: Long?,
+        @Property("coordinates") val coordinates: GeographicPoint2d
 )
