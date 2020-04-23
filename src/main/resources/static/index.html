@@ -26,6 +26,7 @@
 <div id="map"></div>
 
 <script>
+var MIN_ZOOM_TO_SHOW_DATA = 14
 
 var potHoleIcon = L.icon({
     iconUrl: '/images/pot-hole-marker.png',
@@ -65,11 +66,48 @@ var lc = L.control.locate({
 lc.start()
 
 var roadDefectsMarkerCluster = L.markerClusterGroup();
-roadDefectsMarkerCluster.addLayer(L.marker(mymap.getCenter(), {icon: potHoleIcon}));
 mymap.addLayer(roadDefectsMarkerCluster);
 
-roadDefectsMarkerCluster.addLayer(L.marker([44.131330, 12.233333], {icon: potHoleIcon}));
-roadDefectsMarkerCluster.addLayer(L.marker([44.132335, 12.233333], {icon: potHoleIcon}));
+
+function addMarker(coordinates, type) {
+    var icon = potHoleIcon
+    /*if(type == "POTHOLE") {}
+    else if (type == "ROAD-JOINT") {}
+    else if (type == "3") {}
+    else if (type == "4") {}*/
+    roadDefectsMarkerCluster.addLayer(L.marker(coordinates, {icon: icon}));
+}
+
+
+var qualityToColor = { 1: "green", 2: "yellow", 3: "red" };
+function drawRoadSegment(roadSegments) {
+    var segments = JSON.parse(roadSegments);
+    for(const segment of segments) {
+        console.log(segment)
+        console.log(segment.from.lat, segment.from.lng, segment.to.lat, segment.to.lng, qualityToColor[segment.quality])
+        var polyline = L.polyline([[segment.from.lat, segment.from.lng], [segment.to.lat, segment.to.lng]], {color: qualityToColor[segment.quality], weight: 5}).addTo(mymap);
+    }
+}
+
+var lastCenter = mymap.getCenter()
+mymap.on('movestart', function(ev) {
+    lastCenter = mymap.getCenter()
+});
+
+mymap.on('move', function(ev) {
+    if(!mymap.getBounds().contains(lastCenter) && mymap.getZoom() > MIN_ZOOM_TO_SHOW_DATA) {
+        lastCenter = mymap.getCenter()
+        console.log("time to ask for new data", lastCenter)
+    }
+});
+
+
+mymap.on('zoomend', function(ev) {
+    if(mymap.getZoom() > MIN_ZOOM_TO_SHOW_DATA) {
+        console.log("zoom has changed, asking for new data with more radius", ev)
+    }
+});
+
 
 </script>
 </body>
