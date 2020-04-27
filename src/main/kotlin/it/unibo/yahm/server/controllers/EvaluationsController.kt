@@ -1,6 +1,5 @@
 package it.unibo.yahm.server.controllers
 
-import it.unibo.yahm.server.entities.Coordinate
 import it.unibo.yahm.server.entities.Segment
 import it.unibo.yahm.server.maps.MapServices
 import it.unibo.yahm.server.repositories.WaypointRepository

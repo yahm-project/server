@@ -1,12 +1,13 @@
 package it.unibo.yahm.server.controllers
 
-import it.unibo.yahm.server.entities.GeographicPoint
+
 import it.unibo.yahm.server.entities.Segment
 import it.unibo.yahm.server.repositories.WaypointRepository
+import it.unibo.yahm.server.utils.distanceTo
+import org.neo4j.springframework.data.types.GeographicPoint2d
 import org.springframework.beans.factory.annotation.Autowired
 import reactor.core.publisher.EmitterProcessor
 import java.util.*
-
 
 class StreamSegmentController(private val streamToObserve: EmitterProcessor<Segment>) {
 
@@ -14,8 +15,8 @@ class StreamSegmentController(private val streamToObserve: EmitterProcessor<Segm
     private val repository: WaypointRepository? = null
 
     fun observe() {
-       /* val toSnapPoint: MutableList<GeographicPoint> = mutableListOf()
-        var toRelateToPoint = Optional.empty<GeographicPoint>()
+       val toSnapPoint: MutableList<GeographicPoint2d> = mutableListOf()
+        var toRelateToPoint = Optional.empty<GeographicPoint2d>()
         streamToObserve.subscribe {
             val fromPointCoordinates = it.from.coordinates
             val nearestWaypoint = repository!!.findClosestPoints(fromPointCoordinates.longitude, fromPointCoordinates.latitude)
@@ -39,7 +40,7 @@ class StreamSegmentController(private val streamToObserve: EmitterProcessor<Segm
                     toRelateToPoint = Optional.of(nearestWaypoint.get().coordinates)
                 }
             }
-        }*/
+        }
     }
 
     companion object {

@@ -1,6 +1,6 @@
 package it.unibo.yahm.server.maps
 
-import it.unibo.yahm.server.entities.Coordinate
+import org.neo4j.springframework.data.types.GeographicPoint2d
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -19,15 +19,15 @@ object PolylineUtils {
      * @param (x,y)-Coordinates
      * @return polyline-string
      */
-    fun encode(coords: List<Coordinate>): String {
+    fun encode(coords: List<GeographicPoint2d>): String {
         val result: MutableList<String> = mutableListOf()
 
         var prevLat = 0
         var prevLong = 0
 
-        for ((long, lat) in coords) {
-            val iLat = (lat * 1e5).toInt()
-            val iLong = (long * 1e5).toInt()
+        for (coordinate in coords) {
+            val iLat = (coordinate.latitude * 1e5).toInt()
+            val iLong = (coordinate.longitude * 1e5).toInt()
 
             val deltaLat = encodeValue(iLat - prevLat)
             val deltaLong = encodeValue(iLong - prevLong)
@@ -74,7 +74,7 @@ object PolylineUtils {
      * @param polyline-string
      * @return (long,lat)-Coordinates
      */
-    fun decode(polyline: String): List<Coordinate> {
+    fun decode(polyline: String): List<GeographicPoint2d> {
         val coordinateChunks: MutableList<MutableList<Int>> = mutableListOf()
         coordinateChunks.add(mutableListOf())
 
@@ -107,7 +107,7 @@ object PolylineUtils {
             coordinates.add((coordinate).toDouble() / 1000000.0) // add 0 for polyline6
         }
 
-        val points: MutableList<Coordinate> = mutableListOf()
+        val points: MutableList<GeographicPoint2d> = mutableListOf()
         var previousX = 0.0
         var previousY = 0.0
 
@@ -118,7 +118,7 @@ object PolylineUtils {
             previousX += coordinates[i + 1]
             previousY += coordinates[i]
 
-            points.add(Coordinate(round(previousX), round(previousY)))
+            points.add(GeographicPoint2d(round(previousX), round(previousY)))
         }
         return points
     }
@@ -129,7 +129,7 @@ object PolylineUtils {
     /**
      * https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm
      */
-    fun simplify(points: List<Coordinate>, epsilon: Double): List<Coordinate> {
+    fun simplify(points: List<GeographicPoint2d>, epsilon: Double): List<GeographicPoint2d> {
         // Find the point with the maximum distance
         var dmax = 0.0
         var index = 0
@@ -145,8 +145,8 @@ object PolylineUtils {
         // If max distance is greater than epsilon, recursively simplify
         return if (dmax > epsilon) {
             // Recursive call
-            val recResults1: List<Coordinate> = simplify(points.subList(0, index + 1), epsilon)
-            val recResults2: List<Coordinate> = simplify(points.subList(index, end), epsilon)
+            val recResults1: List<GeographicPoint2d> = simplify(points.subList(0, index + 1), epsilon)
+            val recResults2: List<GeographicPoint2d> = simplify(points.subList(index, end), epsilon)
 
             // Build the result list
             listOf(recResults1.subList(0, recResults1.lastIndex), recResults2).flatMap { it.toList() }
@@ -155,7 +155,7 @@ object PolylineUtils {
         }
     }
 
-    private fun perpendicularDistance(pt: Coordinate, lineFrom: Coordinate, lineTo: Coordinate): Double =
+    private fun perpendicularDistance(pt: GeographicPoint2d, lineFrom: GeographicPoint2d, lineTo: GeographicPoint2d): Double =
             abs((lineTo.longitude - lineFrom.longitude) * (lineFrom.latitude - pt.latitude) - (lineFrom.longitude - pt.longitude) * (lineTo.latitude - lineFrom.latitude)) /
                     sqrt((lineTo.longitude - lineFrom.longitude).pow(2.0) + (lineTo.latitude - lineFrom.latitude).pow(2.0))
 

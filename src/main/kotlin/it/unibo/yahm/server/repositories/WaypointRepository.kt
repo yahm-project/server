@@ -1,11 +1,10 @@
 package it.unibo.yahm.server.repositories
 
-import it.unibo.yahm.server.entities.GeographicPoint
-import it.unibo.yahm.server.entities.GeographicPoint2
 import it.unibo.yahm.server.entities.Waypoint
 import org.neo4j.springframework.data.core.ReactiveNeo4jClient
 import org.neo4j.springframework.data.core.fetchAs
 import org.neo4j.springframework.data.repository.ReactiveNeo4jRepository
+import org.neo4j.springframework.data.types.GeographicPoint2d
 import org.springframework.stereotype.Component
 import reactor.core.publisher.Flux
 
@@ -25,7 +24,7 @@ class ClosestPointsRepositoryImpl(val client: ReactiveNeo4jClient) : ClosestPoin
                 .bindAll(params).fetchAs<Waypoint>().mappedBy { _, record ->
                     val waypoint = record["w"].asNode()
                     val coordinates = waypoint["coordinates"].asPoint()
-                    Waypoint(waypoint.id(), Coordinate(coordinates.x(), coordinates.y()))
+                    Waypoint(waypoint.id(), GeographicPoint2d(coordinates.x(), coordinates.y()))
                 }.all()
     }
 
