@@ -4,6 +4,7 @@ import it.unibo.yahm.server.entities.Coordinate
 import it.unibo.yahm.server.entities.Segment
 import it.unibo.yahm.server.maps.MapServices
 import it.unibo.yahm.server.repositories.WaypointRepository
+import it.unibo.yahm.server.utils.ClientIdToStream
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -16,10 +17,15 @@ class EvaluationsController(val repository: WaypointRepository, val service: Map
             val speed: Int
     )
 
+    data class ClientIdAndEvaluations(
+        val id: String,
+        val evaluations: List<Segment>
+    )
+
     @PostMapping("/evaluations")
-    fun addEvaluations(): List<Coordinate>? {
-        return service.snapToRoadCoordinates(listOf(Coordinate(12.604016,43.970994),
-                Coordinate(12.602042,43.969059)))
+    fun addEvaluations(@RequestBody clientIdAndEvaluations: ClientIdAndEvaluations) {
+        val clientStream = ClientIdToStream.getStreamForClient(clientIdAndEvaluations.id)
+        clientIdAndEvaluations.evaluations.forEach{clientStream.onNext(it)}
     }
 
     @GetMapping("/evaluations")

@@ -1,6 +1,7 @@
 package it.unibo.yahm.server.repositories
 
-import it.unibo.yahm.server.entities.Coordinate
+import it.unibo.yahm.server.entities.GeographicPoint
+import it.unibo.yahm.server.entities.GeographicPoint2
 import it.unibo.yahm.server.entities.Waypoint
 import org.neo4j.springframework.data.core.ReactiveNeo4jClient
 import org.neo4j.springframework.data.core.fetchAs
@@ -14,7 +15,7 @@ interface ClosestPointsRepository {
 }
 
 @Component("ClosestPointsRepositoryImpl")
-class ClosestPointsRepositoryImpl(val client: ReactiveNeo4jClient) : ClosestPointsRepository {
+class ClosestPointsRepositoryImpl(val client: ReactiveNeo4jClient) : ClosestPointsRepository  {
 
     override fun findClosestPoints(longitude: Double, latitude: Double): Flux<Waypoint> {
         val params = mapOf("longitude" to longitude, "latitude" to latitude)
