@@ -33,9 +33,11 @@ class RoadsController(val service: MapServices, val client: ReactiveNeo4jClient)
             val quality: List<Quality>
     )
 
+    //data class
+
     @PostMapping("/evaluations")
     fun addEvaluations(@RequestBody clientIdAndEvaluations: ClientIdAndEvaluations) {
-        val clientStream = ClientIdToStream.getStreamForClient(clientIdAndEvaluations.id)
+        val clientStream = ClientIdToStream.getStreamForClient(clientIdAndEvaluations.id, service, client)
         //clientIdAndEvaluations.evaluations.forEach { clientStream.onNext(it) }
     }
 
