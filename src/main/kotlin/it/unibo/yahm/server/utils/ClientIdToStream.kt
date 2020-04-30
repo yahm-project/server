@@ -1,6 +1,6 @@
 package it.unibo.yahm.server.utils
 
-import it.unibo.yahm.server.controllers.StreamSegmentController
+import it.unibo.yahm.server.controllers.InputStreamLegController
 import it.unibo.yahm.server.entities.Leg
 import reactor.core.publisher.EmitterProcessor
 
@@ -12,7 +12,7 @@ class ClientIdToStream() {
             return clientIdToStream.getOrElse(clientId,
                     {
                         val newStreamForClient: EmitterProcessor<Leg> = EmitterProcessor.create()
-                        StreamSegmentController(newStreamForClient).observe()
+                        InputStreamLegController(newStreamForClient).observe()
                         clientIdToStream[clientId] = newStreamForClient
                         newStreamForClient
                     })

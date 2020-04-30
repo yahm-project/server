@@ -2,20 +2,16 @@ package it.unibo.yahm.server.controllers
 
 
 import it.unibo.yahm.server.entities.Leg
-import it.unibo.yahm.server.repositories.WaypointRepository
-import it.unibo.yahm.server.utils.distanceTo
-import org.neo4j.springframework.data.types.GeographicPoint2d
-import org.springframework.beans.factory.annotation.Autowired
+import it.unibo.yahm.server.entities.Node
+import it.unibo.yahm.server.entities.Quality
+import it.unibo.yahm.server.maps.MapServices
+import org.neo4j.springframework.data.core.ReactiveNeo4jClient
 import reactor.core.publisher.EmitterProcessor
-import java.util.*
 
-class StreamSegmentController(private val streamToObserve: EmitterProcessor<Leg>) {
-
-    @Autowired
-    private val repository: WaypointRepository? = null
+class InputStreamLegController(private val streamToObserve: EmitterProcessor<Leg>, private val mapServices: MapServices, private val client: ReactiveNeo4jClient) {
 
     fun observe() {
-       val toSnapPoint: MutableList<GeographicPoint2d> = mutableListOf()
+       /* val toSnapPoint: MutableList<GeographicPoint2d> = mutableListOf()
         var toRelateToPoint = Optional.empty<GeographicPoint2d>()
         streamToObserve.subscribe {
             val fromPointCoordinates = it.from.coordinates
@@ -23,12 +19,12 @@ class StreamSegmentController(private val streamToObserve: EmitterProcessor<Leg>
                     .next()
                     .filter { nearestWayPoint -> fromPointCoordinates.distanceTo(nearestWayPoint.coordinates) <= NEAR_POINT_DISTANCE }
                     .blockOptional()
-            if(nearestWaypoint.isEmpty) {
+            if (nearestWaypoint.isEmpty) {
                 toSnapPoint.add(fromPointCoordinates)
             } else {
-                if(toSnapPoint.size > 0) {
-                    //snap each point
-                    if(toRelateToPoint.isEmpty) {
+                if (toSnapPoint.size > 0) {
+                    val snappedPoints = mapServices!!.snapToRoadCoordinates(toSnapPoint)
+                    if (toRelateToPoint.isEmpty) {
                         val toRelateFromPoint = nearestWaypoint.get()
                         //relate last snapped with toRelateFromPoint
                     } else {
@@ -40,7 +36,11 @@ class StreamSegmentController(private val streamToObserve: EmitterProcessor<Leg>
                     toRelateToPoint = Optional.of(nearestWaypoint.get().coordinates)
                 }
             }
-        }
+        } */
+    }
+
+    fun createOrUpdateQuality(firstNode: Node, secondNode: Node, quality: Quality) {
+
     }
 
     companion object {
