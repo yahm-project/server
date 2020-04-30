@@ -8,8 +8,8 @@ import org.neo4j.springframework.data.core.schema.Node
 import org.neo4j.springframework.data.core.schema.Property
 import org.neo4j.springframework.data.types.GeographicPoint2d
 
-@Node("waypoint")
-data class Waypoint(
+@Node("node")
+data class Node(
         @Id @GeneratedValue val id: Long?,
         @Property("coordinates")
         @JsonDeserialize(using = GeographicPointDeserializer::class)

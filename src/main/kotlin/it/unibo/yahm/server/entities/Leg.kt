@@ -1,9 +1,9 @@
 package it.unibo.yahm.server.entities
 
 
-data class Segment(
-        val from: Waypoint,
-        val to: Waypoint,
+data class Leg(
+        val from: Node,
+        val to: Node,
         val quality: Int,
         val obstacles: Map<ObstacleType, List<Double>> = emptyMap()
 )

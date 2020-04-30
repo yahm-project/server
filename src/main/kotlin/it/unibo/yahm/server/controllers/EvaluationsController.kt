@@ -1,9 +1,11 @@
 package it.unibo.yahm.server.controllers
 
-import it.unibo.yahm.server.entities.Segment
+import it.unibo.yahm.server.entities.Leg
+import it.unibo.yahm.server.entities.Node
 import it.unibo.yahm.server.maps.MapServices
 import it.unibo.yahm.server.repositories.WaypointRepository
 import it.unibo.yahm.server.utils.ClientIdToStream
+import org.neo4j.springframework.data.types.GeographicPoint2d
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -18,7 +20,7 @@ class EvaluationsController(val repository: WaypointRepository, val service: Map
 
     data class ClientIdAndEvaluations(
         val id: String,
-        val evaluations: List<Segment>
+        val evaluations: List<Leg>
     )
 
     @PostMapping("/evaluations")
@@ -28,7 +30,7 @@ class EvaluationsController(val repository: WaypointRepository, val service: Map
     }
 
     @GetMapping("/evaluations")
-    fun getEvaluations(@RequestBody positionAndSpeed: PositionAndSpeed): List<Segment> {
+    fun getEvaluations(@RequestBody positionAndSpeed: PositionAndSpeed): List<Leg> {
         return emptyList()
     }
 

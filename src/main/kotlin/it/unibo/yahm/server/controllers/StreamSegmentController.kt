@@ -1,7 +1,7 @@
 package it.unibo.yahm.server.controllers
 
 
-import it.unibo.yahm.server.entities.Segment
+import it.unibo.yahm.server.entities.Leg
 import it.unibo.yahm.server.repositories.WaypointRepository
 import it.unibo.yahm.server.utils.distanceTo
 import org.neo4j.springframework.data.types.GeographicPoint2d
@@ -9,7 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import reactor.core.publisher.EmitterProcessor
 import java.util.*
 
-class StreamSegmentController(private val streamToObserve: EmitterProcessor<Segment>) {
+class StreamSegmentController(private val streamToObserve: EmitterProcessor<Leg>) {
 
     @Autowired
     private val repository: WaypointRepository? = null

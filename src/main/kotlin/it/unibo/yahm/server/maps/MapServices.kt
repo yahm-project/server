@@ -1,9 +1,7 @@
 package it.unibo.yahm.server.maps
 
 import it.unibo.yahm.server.commons.ApplicationConfig
-import it.unibo.yahm.server.entities.Waypoint
-import it.unibo.yahm.server.maps.MatchService.MatchOptions
-import it.unibo.yahm.server.maps.MatchService.RoadSnaps
+import it.unibo.yahm.server.entities.Node
 import org.neo4j.springframework.data.types.GeographicPoint2d
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -11,42 +9,55 @@ import org.springframework.stereotype.Component
 import org.springframework.web.client.HttpClientErrorException
 import org.springframework.web.client.RestTemplate
 import org.springframework.web.client.getForObject
+import org.springframework.web.client.postForObject
 
 @Component
 class MapServices(private val applicationConfig: ApplicationConfig) {
 
+    private val version = "v1"
+    private val profile = "car"
+
     private val restTemplate = RestTemplate()
     private val logger: Logger = LoggerFactory.getLogger(this.javaClass)
 
-    fun snapToRoadCoordinates(coordinates: List<GeographicPoint2d>): List<GeographicPoint2d>? =
-            snapToRoadRaw(coordinates)?.matchings?.flatMap { matching ->
-                PolylineUtils.decode(matching.geometry!!).map {
-                    GeographicPoint2d(it.latitude, it.longitude)
-                }
-            }
+    fun snapToRoadNodes(coordinates: List<GeographicPoint2d>, timestamps: List<Long> = emptyList(),
+                        radiuses: List<Double> = emptyList()): List<List<Node>>? {
+        val options = MatchService.Options(annotations = MatchService.Annotations.NODES)
+        val legsNodes = snapToRoad(coordinates, timestamps, radiuses, options = options)?.matchings?.flatMap { matching ->
+            matching.legs.map { it.annotation!!.nodes!! }
+        } ?: return null
 
-    fun snapToRoadRaw(coordinates: List<GeographicPoint2d>, timestamps: List<Long> = emptyList(),
-                      radius: List<Double> = emptyList(), waypoints: List<Long> = emptyList(),
-                      hints: List<String> = emptyList(), matchOptions: MatchOptions = MatchOptions()): RoadSnaps? {
-        val sb = StringBuilder()
-        sb.append(applicationConfig.OsrmBackend)
-        if (!applicationConfig.OsrmBackend.endsWith("/")) {
-            sb.append("/")
+        val nodes = findNodesCoordinates(legsNodes.flatten().toSet()) ?: return null
+        return legsNodes.map { leg ->
+            leg.map { nodeId -> nodes.find { it.id == nodeId }!! }
         }
-        sb.append("match/v1/car/")
-        sb.append(coordinates.joinToString(";") { it.latitude.toString() + "," + it.longitude.toString() })
-        sb.append(".json?geometries=polyline6&")
-        for (coll in listOf(timestamps, radius, waypoints, hints)) {
-            if (coll.isNotEmpty()) {
-                sb.append(coll.joinToString(";", postfix = "&"))
-            }
+    }
+
+    fun snapToRoadCoordinates(coordinates: List<GeographicPoint2d>, timestamps: List<Long> = emptyList(),
+                              radiuses: List<Double> = emptyList()): List<GeographicPoint2d>? {
+        return snapToRoad(coordinates, timestamps, radiuses)?.matchings?.flatMap { matching ->
+            PolylineUtils.decode(matching.geometry).map { GeographicPoint2d(it.latitude, it.longitude) }
         }
-        sb.append(matchOptions.toUrlOptions())
+    }
+
+    fun snapToRoad(coordinates: List<GeographicPoint2d>, timestamps: List<Long> = emptyList(),
+                   radiuses: List<Double> = emptyList(), waypoints: List<Long> = emptyList(),
+                   options: MatchService.Options = MatchService.Options()): MatchService.Result? {
+        val sb = osrmUrl("match", coordinates, radiuses)
+        if (timestamps.isNotEmpty()) {
+            sb.append(timestamps.joinToString(";", prefix = "&timestamps="))
+        }
+        if (waypoints.isNotEmpty()) {
+            sb.append(timestamps.joinToString(";", prefix = "&waypoints="))
+        }
+        sb.append(options.toUrlOptions())
 
         return try {
-            return restTemplate.getForObject<RoadSnaps>(sb.toString())
+            return restTemplate.getForObject<MatchService.Result>(sb.toString())
         } catch (badRequest: HttpClientErrorException.BadRequest) {
-            logger.error("Match service invalid query: ${badRequest.message}")
+            if (badRequest.responseBodyAsString != "{\"code\":\"NoSegment\"}") {
+                logger.error("Match service invalid query: ${badRequest.responseBodyAsString}")
+            }
             null
         } catch (e: Exception) {
             logger.error("Match service error: ${e.message} ")
@@ -54,19 +65,55 @@ class MapServices(private val applicationConfig: ApplicationConfig) {
         }
     }
 
-    data class OverpassNodesResult(
-            val elements: List<OverpassNode>
-    )
+    fun findNodesCoordinates(ids: Set<Long>): Set<Node>? {
+        val query = "[out:json]; node(id:${ids.joinToString(", ")});out;"
+        return try {
+            val result = restTemplate.postForObject<OverpassService.Result>(applicationConfig.OverpassAPI, query)
+            result.elements.filter { it.type == "node" }.map { Node(it.id, GeographicPoint2d(it.lat, it.lon)) }.toSet()
+        } catch (e: Exception) {
+            logger.error("Overpass API error: ${e.message} ")
+            null
+        }
+    }
 
-    data class OverpassNode(
-            val type: String,
-            val id: Long,
-            val lat: Double,
-            val long: Double
-    )
+    fun findNearestNode(coordinate: GeographicPoint2d, radius: Double? = null): Long? {
+        return findNearestNodes(coordinate, radius)?.waypoints?.filter { it.nodes.isNotEmpty() }?.map { it.nodes[0] }
+                ?.firstOrNull()
+    }
 
-    fun findNearestNode(latitude: Long, longitude: Long): Long? {
-        return -1;
+    fun findNearestNodes(coordinate: GeographicPoint2d, radius: Double? = null, number: Int = 1): NearestService.Result? {
+        val sb = osrmUrl("nearest", listOf(coordinate), if (radius != null) listOf(radius) else emptyList())
+
+        return try {
+            return restTemplate.getForObject<NearestService.Result>(sb.toString())
+        } catch (badRequest: HttpClientErrorException.BadRequest) {
+            if (badRequest.responseBodyAsString != "{\"code\":\"NoSegment\"}") {
+                logger.error("Match service invalid query: ${badRequest.responseBodyAsString}")
+            }
+
+            null
+        } catch (e: Exception) {
+            logger.error("Match service error: ${e.message} ")
+            null
+        }
+    }
+
+    private fun osrmUrl(serviceName: String, coordinates: List<GeographicPoint2d>,
+                        radiuses: List<Double> = emptyList()): StringBuilder {
+        val sb = StringBuilder()
+        sb.append(applicationConfig.OsrmBackend)
+        if (!applicationConfig.OsrmBackend.endsWith("/")) {
+            sb.append("/")
+        }
+        sb.append("${serviceName}/${version}/${profile}/")
+        sb.append(coordinates.joinToString(";") { it.longitude.toString() + "," + it.latitude.toString() })
+        sb.append(".json?generate_hints=false")
+        if (radiuses.isNotEmpty()) {
+            sb.append("&radiuses=")
+            sb.append(radiuses.joinToString(";"))
+        }
+
+        return sb
     }
 
 }
