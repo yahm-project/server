@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 @ConfigurationProperties("it.unibo.yahm")
 class ApplicationConfig {
 
-    var OsrmBackend: String = "http://localhost"
+    val OsrmBackend: String = "http://localhost"
+    val OverpassAPI: String = "http://localhost"
 
 }

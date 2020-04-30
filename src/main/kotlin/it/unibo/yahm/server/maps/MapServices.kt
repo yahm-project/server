@@ -1,6 +1,7 @@
 package it.unibo.yahm.server.maps
 
 import it.unibo.yahm.server.commons.ApplicationConfig
+import it.unibo.yahm.server.entities.Waypoint
 import it.unibo.yahm.server.maps.MatchService.MatchOptions
 import it.unibo.yahm.server.maps.MatchService.RoadSnaps
 import org.neo4j.springframework.data.types.GeographicPoint2d
@@ -51,6 +52,21 @@ class MapServices(private val applicationConfig: ApplicationConfig) {
             logger.error("Match service error: ${e.message} ")
             null
         }
+    }
+
+    data class OverpassNodesResult(
+            val elements: List<OverpassNode>
+    )
+
+    data class OverpassNode(
+            val type: String,
+            val id: Long,
+            val lat: Double,
+            val long: Double
+    )
+
+    fun findNearestNode(latitude: Long, longitude: Long): Long? {
+        return -1;
     }
 
 }

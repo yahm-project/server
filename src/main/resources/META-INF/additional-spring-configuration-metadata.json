@@ -4,5 +4,10 @@
       "name": "it.unibo.yahm.OsrmBackend",
       "type": "java.lang.String",
       "description": "URL of osrm backend."
+    },
+    {
+      "name": "it.unibo.yahm.OverpassAPI",
+      "type": "java.lang.String",
+      "description": "URL of Overpass API."
     }
   ] }
