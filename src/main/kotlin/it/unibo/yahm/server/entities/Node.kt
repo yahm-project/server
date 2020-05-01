@@ -12,6 +12,5 @@ import org.neo4j.springframework.data.types.GeographicPoint2d
 data class Node(
         @Id @GeneratedValue val id: Long?,
         @Property("coordinates")
-        @JsonDeserialize(using = GeographicPointDeserializer::class)
-        val coordinates: GeographicPoint2d
+        val coordinates: Coordinate
 )
