@@ -50,21 +50,16 @@ class RoadsController(val service: MapServices, val client: ReactiveNeo4jClient)
         //clientIdAndEvaluations.evaluations.forEach { clientStream.onNext(it) }
     }
 
-    @GetMapping("/evaluations")
-    fun getEvaluations(@RequestBody positionAndSpeed: PositionSpeedAndRadius): List<Leg> {
-        return emptyList()
-    }
 
     @GetMapping("/obstacles")
     fun getEvaluationWithinBoundaries(@RequestBody boundaries: Boundaries): Flux<Leg> {
-
-       return client.query("MATCH p =(begin: Node)-[l:LEG]->(end: Node) \n" +
+       return client.query("MATCH p =(begin: Node)-[leg:LEG]->(end: Node) \n" +
                 "WHERE begin.coordinates.latitude < ${boundaries.upperLeftBound.latitude} AND " +
                 "begin.coordinates.latitude > ${boundaries.bottomRightBound.latitude} AND " +
                 "begin.coordinates.longitude < ${boundaries.upperLeftBound.longitude} AND " +
                 "begin.coordinates.longitude > ${boundaries.bottomRightBound.longitude} \n" +
-            "RETURN l").fetchAs<Leg>().mappedBy { _, record ->
-            val leg = record["l"].asRelationship()
+            "RETURN begin, leg, end").fetchAs<Leg>().mappedBy { _, record ->
+            val leg = record["leg"].asRelationship()
             val startNode = record["begin"].asNode()
             val startCoordinates = startNode["coordinates"].asPoint()
             val endNode = record["end"].asNode()
@@ -75,16 +70,23 @@ class RoadsController(val service: MapServices, val client: ReactiveNeo4jClient)
         }.all()
     }
 
-    @GetMapping("/obstacles")
+    @GetMapping("/obstacles/relative")
     fun getEvaluationWithinBoundariesAlongUserDirection(@RequestBody boundaries: Boundaries): List<Leg> {
         val userNearestNodeId = service.findNearestNode(boundaries.userPosition)
-        if(userNearestNodeId != null) {
-            client.query("MATCH (p:Leg) WHERE p.id = $userNearestNodeId \n" +
-                    "MATCH p =(begin)-[*]->(END)\n" +
-                    "WHERE end.coordinates.getLatitude() < ${boundaries.upperLeftBound.latitude} AND end.coordinates.getLatitude > ${boundaries.bottomRightBound.latitude} AND end.coordinates.getLongitude < ${boundaries.upperLeftBound.longitude} AND end.coordinates.getLongitude > ${boundaries.bottomRightBound.longitude}\n" +
-                    "FOREACH (n IN nodes(p))")
+        return if(userNearestNodeId != null) {
+            client.query("MATCH path = (a:Node)-[:LEG  *1..20]->(b: Node) \n" +
+                    "WHERE a.id = $userNearestNodeId AND " +
+                    "b.coordinates.latitude < ${boundaries.upperLeftBound.latitude} AND " +
+                    "b.coordinates.latitude > ${boundaries.bottomRightBound.latitude} AND " +
+                    "b.coordinates.longitude < ${boundaries.upperLeftBound.longitude} AND " +
+                    "b.coordinates.longitude > ${boundaries.bottomRightBound.longitude} \n" +
+                    "WITH relationships(path) as r \n" +
+                    "UNWIND r as t \n" +
+                    "RETURN DISTINCT startNode(t), t, endNode(t)")
+            emptyList()
+        } else {
+            emptyList()
         }
-        return emptyList()
     }
 
 
