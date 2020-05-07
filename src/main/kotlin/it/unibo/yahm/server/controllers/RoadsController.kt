@@ -6,9 +6,9 @@ import it.unibo.yahm.server.entities.Node
 import it.unibo.yahm.server.entities.ObstacleType
 import it.unibo.yahm.server.entities.Quality
 import it.unibo.yahm.server.maps.MapServices
+import org.neo4j.driver.Record
 import org.neo4j.springframework.data.core.ReactiveNeo4jClient
 import org.neo4j.springframework.data.core.fetchAs
-import org.neo4j.springframework.data.types.GeographicPoint2d
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Flux
@@ -43,12 +43,15 @@ class RoadsController(private val service: MapServices, private val client: Reac
             val qualities: List<Quality>
     )
 
-    data class Boundaries(
-            val userPosition: Coordinate,
-            val upperLeftBound: Coordinate,
-            val bottomRightBound: Coordinate
+    data class ClientLegInfo(
+            val coordinate: Coordinate,
+            //val timestamp: Long,
+            val radius: Double,
+            //val obstacle: PositionAndObstacleType,
+            val quality: Quality?
     )
 
+    //data class
 
     @PostMapping("/evaluations")
     fun addEvaluations(@RequestBody clientIdAndEvaluations: ClientIdAndEvaluations) {
@@ -56,42 +59,41 @@ class RoadsController(private val service: MapServices, private val client: Reac
     }
 
     @GetMapping("/evaluations")
-    fun getEvaluations(@RequestBody positionAndSpeed: PositionSpeedAndRadius): List<Leg> {
-        return emptyList()
+    fun getEvaluationWithinRadius(@RequestParam latitude: Double,
+                                      @RequestParam longitude: Double,
+                                      @RequestParam radius: Double): Flux<Leg> {
+       return client.query("MATCH p =(begin: Node)-[leg:LEG]->(end: Node) \n" +
+                "WHERE distance(point({latitude: $latitude, longitude: $longitude}), end.coordinates) <= $radius  \n" +
+            "RETURN begin, leg, end").fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all()
     }
 
-    @GetMapping("/obstacles")
-    fun getEvaluationWithinBoundaries(@RequestBody boundaries: Boundaries): Flux<Leg> {
-
-       return client.query("MATCH p =(begin: Node)-[l:LEG]->(end: Node) \n" +
-                "WHERE begin.coordinates.latitude < ${boundaries.upperLeftBound.latitude} AND " +
-                "begin.coordinates.latitude > ${boundaries.bottomRightBound.latitude} AND " +
-                "begin.coordinates.longitude < ${boundaries.upperLeftBound.longitude} AND " +
-                "begin.coordinates.longitude > ${boundaries.bottomRightBound.longitude} \n" +
-            "RETURN l").fetchAs<Leg>().mappedBy { _, record ->
-            val leg = record["l"].asRelationship()
-            val startNode = record["begin"].asNode()
-            val startCoordinates = startNode["coordinates"].asPoint()
-            val endNode = record["end"].asNode()
-            val endCoordinates = endNode["coordinates"].asPoint()
-            val start = Node(startNode.id(),  Coordinate(startCoordinates.x(), startCoordinates.y()))
-            val end = Node(endNode.id(),  Coordinate(endCoordinates.x(), endCoordinates.y()))
-            Leg(start, end, leg["quality"].asInt(), emptyMap())
-        }.all()
+    @GetMapping("/evaluations/relative")
+    fun getEvaluationWithinBoundariesAlongUserDirection(@RequestParam latitude: Double,
+                                                        @RequestParam longitude: Double,
+                                                        @RequestParam radius: Double): Flux<Leg> {
+        val userPosition = Coordinate(latitude, longitude)
+        val userNearestNodeId = service.findNearestNode(userPosition)
+        return if(userNearestNodeId != null) {
+            client.query("MATCH path = (a:Node)-[:LEG  *1..20]->(b: Node) \n" +
+                    "UNWIND NODES(path) AS n WITH path, size(collect(DISTINCT n)) AS testLength " +
+                    "WHERE testLength = LENGTH(path) + 1 AND a.id = $userNearestNodeId AND " +
+                    "distance(a.coordinates, b.coordinates) <= radius \n" +
+                    "WITH relationships(path) as rel_arr \n" +
+                    "UNWIND rel_arr as rel \n" +
+                    "RETURN DISTINCT startNode(rel), rel, endNode(rel)")
+            .fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record)}.all()
+        } else return Flux.empty()
     }
 
-    @GetMapping("/obstacles/userdir")
-    fun getEvaluationWithinBoundariesAlongUserDirection(@RequestBody boundaries: Boundaries): List<Leg> {
-        val userNearestNodeId = service.findNearestNode(boundaries.userPosition)
-        if(userNearestNodeId != null) {
-            client.query("MATCH (p:Leg) WHERE p.id = $userNearestNodeId \n" +
-                    "MATCH p =(begin)-[*]->(END)\n" +
-                    "WHERE end.coordinates.getLatitude() < ${boundaries.upperLeftBound.latitude} AND end.coordinates.getLatitude > ${boundaries.bottomRightBound.latitude} AND end.coordinates.getLongitude < ${boundaries.upperLeftBound.longitude} AND end.coordinates.getLongitude > ${boundaries.bottomRightBound.longitude}\n" +
-                    "FOREACH (n IN nodes(p))")
-        }
-        return emptyList()
+    fun legFromRecord(record: Record): Leg {
+        val leg = record["leg"].asRelationship()
+        val startNode = record["begin"].asNode()
+        val startCoordinates = startNode["coordinates"].asPoint()
+        val endNode = record["end"].asNode()
+        val endCoordinates = endNode["coordinates"].asPoint()
+        val start = Node(startNode.id(),  Coordinate(startCoordinates.x(), startCoordinates.y()))
+        val end = Node(endNode.id(),  Coordinate(endCoordinates.x(), endCoordinates.y()))
+        val obstacles = emptyMap<ObstacleType, List<Double>>() //leg["obstacles"].asMap{v -> v.asList{dist -> dist.asDouble()}}.mapKeys { (k,v) -> ObstacleType.valueOf(k) }
+        return Leg(start, end, leg["quality"].asInt(), obstacles)
     }
-
-
-
 }
