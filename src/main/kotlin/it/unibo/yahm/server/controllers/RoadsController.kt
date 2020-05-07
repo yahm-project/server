@@ -7,6 +7,7 @@ import it.unibo.yahm.server.entities.ObstacleType
 import it.unibo.yahm.server.entities.Quality
 import it.unibo.yahm.server.maps.MapServices
 import it.unibo.yahm.server.utils.ClientIdToStream
+import it.unibo.yahm.server.utils.calculateIntermediatePoint
 import org.neo4j.driver.Record
 import org.neo4j.springframework.data.core.ReactiveNeo4jClient
 import org.neo4j.springframework.data.core.fetchAs
@@ -100,7 +101,11 @@ class RoadsController(val service: MapServices, val client: ReactiveNeo4jClient)
         val endCoordinates = endNode["coordinates"].asPoint()
         val start = Node(startNode.id(),  Coordinate(startCoordinates.x(), startCoordinates.y()))
         val end = Node(endNode.id(),  Coordinate(endCoordinates.x(), endCoordinates.y()))
-        val obstacles = emptyMap<ObstacleType, List<Double>>() //leg["obstacles"].asMap{v -> v.asList{dist -> dist.asDouble()}}.mapKeys { (k,v) -> ObstacleType.valueOf(k) }
+        //val obstacles = emptyMap<ObstacleType, List<Coordinate>>()
+        val obstacles = ObstacleType.values().filter {!leg[it.name].isNull}.map{
+           it to leg[it.name].asList(){ v -> calculateIntermediatePoint( start.coordinates, end.coordinates, v.asDouble()) ?: start.coordinates}
+        }.toMap()
+
         return Leg(start, end, leg["quality"].asInt(), obstacles)
     }
 }
