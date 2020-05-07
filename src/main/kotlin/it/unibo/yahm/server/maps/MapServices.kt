@@ -83,7 +83,7 @@ class MapServices(private val applicationConfig: ApplicationConfig) {
 
     fun findNearestNodes(coordinate: Coordinate, radius: Double? = null, number: Int = 1): NearestService.Result? {
         val sb = osrmUrl("nearest", listOf(coordinate), if (radius != null) listOf(radius) else emptyList())
-
+        sb.append("&number=").append(number)
         return try {
             return restTemplate.getForObject<NearestService.Result>(sb.toString())
         } catch (badRequest: HttpClientErrorException.BadRequest) {

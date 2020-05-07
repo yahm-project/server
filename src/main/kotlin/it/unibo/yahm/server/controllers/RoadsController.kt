@@ -1,23 +1,27 @@
 package it.unibo.yahm.server.controllers
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import it.unibo.yahm.server.entities.Coordinate
 import it.unibo.yahm.server.entities.Leg
 import it.unibo.yahm.server.entities.Node
 import it.unibo.yahm.server.entities.ObstacleType
 import it.unibo.yahm.server.entities.Quality
 import it.unibo.yahm.server.maps.MapServices
-import it.unibo.yahm.server.utils.ClientIdToStream
-import it.unibo.yahm.server.utils.GeographicPointDeserializer
 import org.neo4j.springframework.data.core.ReactiveNeo4jClient
 import org.neo4j.springframework.data.core.fetchAs
 import org.neo4j.springframework.data.types.GeographicPoint2d
 import org.springframework.web.bind.annotation.*
+import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Flux
 
 @RestController
 @RequestMapping("/roads")
-class RoadsController(val service: MapServices, val client: ReactiveNeo4jClient) {
+class RoadsController(private val service: MapServices, private val client: ReactiveNeo4jClient) {
+
+    private val inputRequestStream: EmitterProcessor<ClientIdAndEvaluations> = EmitterProcessor.create()
+
+    init {
+        InputStreamLegController(inputRequestStream, service, client).observe()
+    }
 
     data class PositionSpeedAndRadius(
             val coordinates: Coordinate,
@@ -35,41 +39,20 @@ class RoadsController(val service: MapServices, val client: ReactiveNeo4jClient)
             val coordinates: List<Coordinate>,
             //val timestamps: List<Long>,
             val radiuses: List<Double>,
-            //val obstacles: List<PositionAndObstacleType>,
+            val obstacles: List<PositionAndObstacleType>,
             val qualities: List<Quality>
     )
 
-    data class ClientLegInfo(
-            val coordinate: Coordinate,
-            //val timestamp: Long,
-            val radius: Double,
-            //val obstacle: PositionAndObstacleType,
-            val quality: Quality?
-    )
-    
     data class Boundaries(
-            val userPosition: GeographicPoint2d,
-            val upperLeftBound: GeographicPoint2d,
-            val bottomRightBound: GeographicPoint2d
+            val userPosition: Coordinate,
+            val upperLeftBound: Coordinate,
+            val bottomRightBound: Coordinate
     )
 
-    //data class
 
     @PostMapping("/evaluations")
     fun addEvaluations(@RequestBody clientIdAndEvaluations: ClientIdAndEvaluations) {
-        val clientStream = ClientIdToStream.getStreamForClient(clientIdAndEvaluations.id, service, client)
-        clientIdAndEvaluations.coordinates.forEachIndexed { index, coordinate ->
-            //if(index < clientIdAndEvaluations.coordinates.size - 1){
-                clientStream.onNext(
-                        ClientLegInfo(coordinate,
-                                //clientIdAndEvaluations.timestamps[index],
-                                clientIdAndEvaluations.radiuses[index],
-                                //clientIdAndEvaluations.obstacles[index],
-                                if(index < clientIdAndEvaluations.coordinates.size - 1)  clientIdAndEvaluations.qualities[index] else null
-                        )
-                )
-           //}
-        }
+        inputRequestStream.onNext(clientIdAndEvaluations)
     }
 
     @GetMapping("/evaluations")
@@ -91,13 +74,13 @@ class RoadsController(val service: MapServices, val client: ReactiveNeo4jClient)
             val startCoordinates = startNode["coordinates"].asPoint()
             val endNode = record["end"].asNode()
             val endCoordinates = endNode["coordinates"].asPoint()
-            val start = Node(startNode.id(),  GeographicPoint2d(startCoordinates.x(), startCoordinates.y()))
-            val end = Node(endNode.id(),  GeographicPoint2d(endCoordinates.x(), endCoordinates.y()))
+            val start = Node(startNode.id(),  Coordinate(startCoordinates.x(), startCoordinates.y()))
+            val end = Node(endNode.id(),  Coordinate(endCoordinates.x(), endCoordinates.y()))
             Leg(start, end, leg["quality"].asInt(), emptyMap())
         }.all()
     }
 
-    @GetMapping("/obstacles")
+    @GetMapping("/obstacles/userdir")
     fun getEvaluationWithinBoundariesAlongUserDirection(@RequestBody boundaries: Boundaries): List<Leg> {
         val userNearestNodeId = service.findNearestNode(boundaries.userPosition)
         if(userNearestNodeId != null) {
