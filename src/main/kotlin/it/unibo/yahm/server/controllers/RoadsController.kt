@@ -12,11 +12,18 @@ import org.neo4j.driver.Record
 import org.neo4j.springframework.data.core.ReactiveNeo4jClient
 import org.neo4j.springframework.data.core.fetchAs
 import org.springframework.web.bind.annotation.*
+import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Flux
 
 @RestController
 @RequestMapping("/roads")
-class RoadsController(val service: MapServices, val client: ReactiveNeo4jClient) {
+class RoadsController(private val service: MapServices, private val client: ReactiveNeo4jClient) {
+
+    private val inputRequestStream: EmitterProcessor<ClientIdAndEvaluations> = EmitterProcessor.create()
+
+    init {
+        InputStreamLegController(inputRequestStream, service, client).observe()
+    }
 
     data class PositionSpeedAndRadius(
             val coordinates: Coordinate,
@@ -34,7 +41,7 @@ class RoadsController(val service: MapServices, val client: ReactiveNeo4jClient)
             val coordinates: List<Coordinate>,
             //val timestamps: List<Long>,
             val radiuses: List<Double>,
-            //val obstacles: List<PositionAndObstacleType>,
+            val obstacles: List<PositionAndObstacleType>,
             val qualities: List<Quality>
     )
 
@@ -46,24 +53,11 @@ class RoadsController(val service: MapServices, val client: ReactiveNeo4jClient)
             val quality: Quality?
     )
 
-
     //data class
 
     @PostMapping("/evaluations")
     fun addEvaluations(@RequestBody clientIdAndEvaluations: ClientIdAndEvaluations) {
-        val clientStream = ClientIdToStream.getStreamForClient(clientIdAndEvaluations.id, service, client)
-        clientIdAndEvaluations.coordinates.forEachIndexed { index, coordinate ->
-            //if(index < clientIdAndEvaluations.coordinates.size - 1){
-                clientStream.onNext(
-                        ClientLegInfo(coordinate,
-                                //clientIdAndEvaluations.timestamps[index],
-                                clientIdAndEvaluations.radiuses[index],
-                                //clientIdAndEvaluations.obstacles[index],
-                                if(index < clientIdAndEvaluations.coordinates.size - 1)  clientIdAndEvaluations.qualities[index] else null
-                        )
-                )
-           //}
-        }
+        inputRequestStream.onNext(clientIdAndEvaluations)
     }
 
     @GetMapping("/evaluations")
