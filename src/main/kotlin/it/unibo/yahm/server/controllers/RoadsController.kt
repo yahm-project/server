@@ -6,7 +6,6 @@ import it.unibo.yahm.server.entities.Node
 import it.unibo.yahm.server.entities.ObstacleType
 import it.unibo.yahm.server.entities.Quality
 import it.unibo.yahm.server.maps.MapServices
-import it.unibo.yahm.server.utils.ClientIdToStream
 import it.unibo.yahm.server.utils.calculateIntermediatePoint
 import org.neo4j.driver.Record
 import org.neo4j.springframework.data.core.ReactiveNeo4jClient
@@ -14,6 +13,8 @@ import org.neo4j.springframework.data.core.fetchAs
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Flux
+import kotlin.math.floor
+import kotlin.math.round
 
 @RestController
 @RequestMapping("/roads")
@@ -93,13 +94,13 @@ class RoadsController(private val service: MapServices, private val client: Reac
         val startCoordinates = startNode["coordinates"].asPoint()
         val endNode = record["end"].asNode()
         val endCoordinates = endNode["coordinates"].asPoint()
-        val start = Node(startNode.id(),  Coordinate(startCoordinates.x(), startCoordinates.y()))
-        val end = Node(endNode.id(),  Coordinate(endCoordinates.x(), endCoordinates.y()))
+        val start = Node(startNode.id(),  Coordinate(startCoordinates.y(), startCoordinates.x()))
+        val end = Node(endNode.id(),  Coordinate(endCoordinates.y(), endCoordinates.x()))
         //val obstacles = emptyMap<ObstacleType, List<Coordinate>>()
         val obstacles = ObstacleType.values().filter {!leg[it.name].isNull}.map{
            it to leg[it.name].asList(){ v -> calculateIntermediatePoint( start.coordinates, end.coordinates, v.asDouble()) ?: start.coordinates}
         }.toMap()
-
-        return Leg(start, end, leg["quality"].asInt(), obstacles)
+        val qualityValue = round(leg["quality"].asDouble()).toInt()
+        return Leg(start, end, qualityValue, obstacles)
     }
 }
