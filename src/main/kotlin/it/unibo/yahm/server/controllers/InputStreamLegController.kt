@@ -9,6 +9,7 @@ import reactor.core.scheduler.Schedulers
 import it.unibo.yahm.server.controllers.RoadsController.PositionAndObstacleType
 import it.unibo.yahm.server.entities.*
 import org.neo4j.driver.Record
+import org.neo4j.driver.summary.ResultSummary
 import org.neo4j.springframework.data.core.fetchAs
 import kotlin.math.abs
 
@@ -100,19 +101,29 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Roa
                 }
     }
 
-    private fun createOrUpdateQuality(firstNode: Node, secondNode: Node, quality: Quality, obstacles: Map<String, List<Double>>): Mono<Int> {
-        val qualityValue = quality.value
-        val mapToString = obstacles
-                .entries
-                .joinToString(separator = ",")
-                { it.key + ": " + it.value.joinToString(",", "[", "]") }
-        return client.query("MERGE (a:Node{id:${firstNode.id}, coordinates: point({ longitude: ${firstNode.coordinates.longitude}, latitude:${firstNode.coordinates.latitude}})}) \n" +
-                "MERGE (b:Node{id:${secondNode.id}, coordinates: point({ longitude: ${secondNode.coordinates.longitude}, latitude:${secondNode.coordinates.latitude}})}) \n" +
-                "MERGE (a)-[s:LEG]->(b)\n" +
-                "ON CREATE SET s = {quality: $qualityValue, $mapToString\n}" +
-                "ON MATCH SET s = {quality: s.quality * (1 - $NEW_QUALITY_WEIGHT) + $qualityValue * $NEW_QUALITY_WEIGHT, $mapToString}")
+    private fun createOrUpdateQuality(firstNode: Node, secondNode: Node, quality: Quality, obstacles: Map<String, List<Double>>): Mono<ResultSummary> {
+        fun getQueryString(): String{
+            val qualityValue = quality.value
+            val queryFirstPart = "MERGE (a:Node{id:${firstNode.id}, coordinates: point({ longitude: ${firstNode.coordinates.longitude}, latitude:${firstNode.coordinates.latitude}})}) \n" +
+                    "MERGE (b:Node{id:${secondNode.id}, coordinates: point({ longitude: ${secondNode.coordinates.longitude}, latitude:${secondNode.coordinates.latitude}})}) \n" +
+                    "MERGE (a)-[s:LEG]->(b)\n"
+            if(obstacles.isNotEmpty()){
+                val mapToString = obstacles
+                        .entries
+                        .joinToString(separator = ",")
+                        { it.key + ": " + it.value.joinToString(",", "[", "]") }
+                return  queryFirstPart +
+                        "ON CREATE SET s = {quality: $qualityValue, $mapToString \n}" +
+                        "ON MATCH SET s = {quality: s.quality * (1 - $NEW_QUALITY_WEIGHT) + $qualityValue * $NEW_QUALITY_WEIGHT, $mapToString}"
+            } else {
+                return  queryFirstPart+
+                        "ON CREATE SET s = {quality: $qualityValue\n}" +
+                        "ON MATCH SET s = {quality: s.quality * (1 - $NEW_QUALITY_WEIGHT) + $qualityValue * $NEW_QUALITY_WEIGHT}"
+            }
+        }
+
+        return client.query(getQueryString())
                 .run()
-                .map { qualityValue }
     }
 
     private fun getLegInformation(firstNodeId: Long, secondNodeId: Long): Mono<Map<String, List<Double>>> {
