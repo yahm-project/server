@@ -13,7 +13,6 @@ import org.neo4j.springframework.data.core.fetchAs
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Flux
-import kotlin.math.floor
 import kotlin.math.round
 
 @RestController
@@ -65,9 +64,23 @@ class RoadsController(private val service: MapServices, private val client: Reac
     fun getEvaluationWithinRadius(@RequestParam latitude: Double,
                                       @RequestParam longitude: Double,
                                       @RequestParam radius: Double): Flux<Leg> {
-       return client.query("MATCH p =(begin: Node)-[leg:LEG]->(end: Node) \n" +
+       return client.query("MATCH (begin: Node)-[leg:LEG]->(end: Node) \n" +
                 "WHERE distance(point({latitude: $latitude, longitude: $longitude}), end.coordinates) <= $radius  \n" +
-            "RETURN begin, leg, end").fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all()
+            "RETURN begin, leg, end").fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all().buffer().flatMap { legs ->
+           val modifyList = legs.groupBy { if(it.from.id!! < it.to.id!!) Pair(it.from.id, it.to.id) else Pair(it.to.id, it.from.id) }.values.map {
+               val firstLeg = it[0]
+               if(it.size == 2) {
+                   val secondLeg = it[1]
+                   firstLeg.quality = (firstLeg.quality+secondLeg.quality)/2
+                   firstLeg.obstacles = (firstLeg.obstacles.asSequence() + secondLeg.obstacles.asSequence())
+                           .distinct()
+                           .groupBy({ it.key }, { it.value })
+                           .mapValues {  (_, values) -> values.flatten() }
+               }
+               firstLeg
+           }
+           Flux.fromIterable(modifyList)
+       }
     }
 
     @GetMapping("/evaluations/relative")

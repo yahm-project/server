@@ -6,6 +6,6 @@ import org.neo4j.springframework.data.types.GeographicPoint2d
 data class Leg(
         val from: Node,
         val to: Node,
-        val quality: Int,
-        val obstacles: Map<ObstacleType, List<Coordinate>> = emptyMap()
+        var quality: Int,
+        var obstacles: Map<ObstacleType, List<Coordinate>> = emptyMap()
 )
