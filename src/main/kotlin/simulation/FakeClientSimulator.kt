@@ -11,7 +11,7 @@ import java.io.File
 import java.time.Duration
 import kotlin.system.exitProcess
 
-class FakeClientSimulator(inputSource: File, private val bufferSize: Int = 20,
+class FakeClientSimulator(inputSource: File, private val bufferSize: Int = 15,
                           private val delayBetweenRequests: Long = 5) {
 
     private val url = "http://localhost:8080/roads/evaluations"
@@ -27,7 +27,7 @@ class FakeClientSimulator(inputSource: File, private val bufferSize: Int = 20,
                 .delayElements(Duration.ofSeconds(delayBetweenRequests))
                 .subscribe({buf ->
                     println("Sending elements..")
-                    restTemplate.postForObject<Void>(url, RoadsController.ClientIdAndEvaluations(
+                    restTemplate.postForObject<Void?>(url, RoadsController.ClientIdAndEvaluations(
                             "FakeClientSimulator",
                             buf.map { Coordinate(it[0].toDouble(), it[1].toDouble()) },
                             buf.map { it[2].toDouble() },
@@ -48,6 +48,5 @@ fun main(args: Array<String>) {
         System.err.println("Provide as first argument the file of stretches")
         exitProcess(1)
     }
-
     FakeClientSimulator(File(args[0])).doSimulation()
 }
