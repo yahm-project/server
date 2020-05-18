@@ -11,7 +11,6 @@ import it.unibo.yahm.server.entities.*
 import org.neo4j.driver.Record
 import org.neo4j.driver.summary.ResultSummary
 import org.neo4j.springframework.data.core.fetchAs
-import kotlin.math.abs
 
 class InputStreamLegController(private val streamToObserve: EmitterProcessor<RoadsController.ClientIdAndEvaluations>,
                                private val mapServices: MapServices,
@@ -107,16 +106,16 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Roa
             val queryFirstPart = "MERGE (a:Node{id:${firstNode.id}, coordinates: point({ longitude: ${firstNode.coordinates.longitude}, latitude:${firstNode.coordinates.latitude}})}) \n" +
                     "MERGE (b:Node{id:${secondNode.id}, coordinates: point({ longitude: ${secondNode.coordinates.longitude}, latitude:${secondNode.coordinates.latitude}})}) \n" +
                     "MERGE (a)-[s:LEG]->(b)\n"
-            if(obstacles.isNotEmpty()){
+            return if(obstacles.isNotEmpty()){
                 val mapToString = obstacles
                         .entries
                         .joinToString(separator = ",")
                         { it.key + ": " + it.value.joinToString(",", "[", "]") }
-                return  queryFirstPart +
+                queryFirstPart +
                         "ON CREATE SET s = {quality: $qualityValue, $mapToString \n}" +
                         "ON MATCH SET s = {quality: s.quality * (1 - $NEW_QUALITY_WEIGHT) + $qualityValue * $NEW_QUALITY_WEIGHT, $mapToString}"
             } else {
-                return  queryFirstPart+
+                queryFirstPart+
                         "ON CREATE SET s = {quality: $qualityValue\n}" +
                         "ON MATCH SET s = {quality: s.quality * (1 - $NEW_QUALITY_WEIGHT) + $qualityValue * $NEW_QUALITY_WEIGHT}"
             }

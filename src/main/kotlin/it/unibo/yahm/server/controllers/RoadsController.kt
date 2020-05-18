@@ -13,6 +13,8 @@ import org.neo4j.springframework.data.core.fetchAs
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
+import java.util.*
 import kotlin.math.round
 
 @RestController
@@ -53,7 +55,52 @@ class RoadsController(private val service: MapServices, private val client: Reac
             val quality: Quality?
     )
 
-    //data class
+
+    @DeleteMapping("/obstacles")
+    fun removeObstacle(@RequestParam latitude: Double,
+                       @RequestParam longitude: Double,
+                       @RequestParam obstacleType: ObstacleType) {
+        data class RelativeDistances(
+                val distanceFromFirstNode: Double,
+                val distanceFromSecondNode: Double
+        )
+        fun getNodeById(id: Long): Mono<Node> {
+            return client.query("MATCH (a:Node{id:$id}) RETURN a").fetchAs<Node>().mappedBy { _, record ->
+                val node = record["a"].asNode()
+                val nodeCoordinates = node["coordinates"].asPoint()
+                Node(node.id(),  Coordinate(nodeCoordinates.y(), nodeCoordinates.x()))
+            }.first()
+        }
+        fun getRelativeDistanceFromNodes(firstNodeId: Long, secondNodeId: Long, obstacleCoordinate: Coordinate):
+                Optional<RelativeDistances> {
+            val firstNode = getNodeById(firstNodeId).block()
+            val secondNode = getNodeById(secondNodeId).block()
+            return if(firstNode != null && secondNode != null) {
+                val relativeDistanceFromFirstNode = firstNode
+                        .coordinates
+                        .distanceTo(obstacleCoordinate) / firstNode.coordinates.distanceTo(secondNode.coordinates)
+                val relativeDistanceFromSecondNode = secondNode
+                        .coordinates
+                        .distanceTo(obstacleCoordinate) / secondNode.coordinates.distanceTo(firstNode.coordinates)
+                Optional.of(RelativeDistances(relativeDistanceFromFirstNode, relativeDistanceFromSecondNode))
+            } else {
+                Optional.empty()
+            }
+        }
+        fun getRelationObstacles(firstNodeId: Long, secondNodeId: Long){
+
+        }
+        val obstacleCoordinate = Coordinate(latitude, longitude)
+        val nearestWaypoints = service.findNearestNodes(obstacleCoordinate, number = 1)
+        if (nearestWaypoints != null) {
+            val relativeDistances = getRelativeDistanceFromNodes(nearestWaypoints.waypoints[0].nodes[0],
+                    nearestWaypoints.waypoints[0].nodes[1],
+                    obstacleCoordinate)
+            if(relativeDistances.isPresent){
+
+            }
+        }
+    }
 
     @PostMapping("/evaluations")
     fun addEvaluations(@RequestBody clientIdAndEvaluations: ClientIdAndEvaluations) {
