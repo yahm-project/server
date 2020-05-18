@@ -49,6 +49,12 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
                 .run()
     }
 
+    fun updateLegObstacles(firstNodeId: Long, secondNodeId: Long, obstacles: Pair<String, List<Double>>): Mono<ResultSummary> {
+       return client.query("MATCH (a:Node{id:$firstNodeId})-[leg:LEG]->(b:Node{id:$secondNodeId})\n" +
+                "SET leg.${obstacles.first} = ${obstacles.second}")
+               .run()
+    }
+
     fun getLegObstacleTypeToDistance(firstNodeId: Long, secondNodeId: Long): Mono<Map<String, List<Double>>> {
 
         fun mapObstacleTypeToDistance(record: Record): Map<String, List<Double>> {

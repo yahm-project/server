@@ -10,7 +10,10 @@ import org.neo4j.springframework.data.core.ReactiveNeo4jClient
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
 import java.util.*
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 @RestController
 @RequestMapping("/roads")
@@ -37,10 +40,33 @@ class RoadsController(private val service: MapServices, private val client: Reac
             val qualities: List<Quality>
     )
 
+    private fun Double.round(decimalNumber: Double): Double {
+        val pow = (10.0.pow(decimalNumber))
+        return (this * pow.toInt()).roundToInt() / pow
+    }
+
+
+    private fun removeElementFromListIfPresent(initialList: List<Double>, element: Double): List<Double> {
+        val toReturnList = mutableListOf<Double>()
+        var lastIndex = 0
+        for (index in initialList.indices) {
+            val listValue = initialList[index]
+            lastIndex = index
+            println(listValue.round(6.0).toString() + " " + element.round(6.0))
+            if (listValue.round(6.0) != element.round(6.0)) {
+                toReturnList.add(listValue)
+            } else {
+                break
+            }
+        }
+        toReturnList.addAll(initialList.subList(lastIndex + 1, initialList.size))
+        return toReturnList
+    }
+
     @DeleteMapping("/obstacles")
     fun removeObstacle(@RequestParam latitude: Double,
                        @RequestParam longitude: Double,
-                       @RequestParam obstacleType: ObstacleType) {
+                       @RequestParam obstacleType: ObstacleType): Mono<Boolean> {
         data class RelativeDistances(
                 val distanceFromFirstNode: Double,
                 val distanceFromSecondNode: Double
@@ -63,20 +89,50 @@ class RoadsController(private val service: MapServices, private val client: Reac
             }
         }
 
-        fun getRelationObstacles(firstNodeId: Long, secondNodeId: Long) {
-
+        fun removeObstacleFromLegAndUpdateDB(it: Map<String, List<Double>>,
+                                             relativeDistanceFromNode: Double,
+                                             firstNodeId: Long,
+                                             secondNodeId: Long): Mono<Boolean> {
+            if (it.containsKey(obstacleType.toString())) {
+                val obstaclesDistances = it[obstacleType.toString()]!!
+                val newObstacles = removeElementFromListIfPresent(obstaclesDistances, relativeDistanceFromNode)
+                return if (obstaclesDistances.size != newObstacles.size) {
+                    queriesManager.updateLegObstacles(firstNodeId, secondNodeId, Pair(obstacleType.toString(), newObstacles)).map { true }
+                } else {
+                    Mono.just(false)
+                }
+            }
+            return Mono.just(false)
         }
 
         val obstacleCoordinate = Coordinate(latitude, longitude)
         val nearestWaypoints = service.findNearestNodes(obstacleCoordinate, number = 1)
         if (nearestWaypoints != null) {
-            val relativeDistances = getRelativeDistanceFromNodes(nearestWaypoints.waypoints[0].nodes[0],
-                    nearestWaypoints.waypoints[0].nodes[1],
+            val firstNodeId = nearestWaypoints.waypoints[0].nodes[0]
+            val secondNodeId = nearestWaypoints.waypoints[0].nodes[1]
+            val relativeDistances = getRelativeDistanceFromNodes(firstNodeId,
+                    secondNodeId,
                     obstacleCoordinate)
             if (relativeDistances.isPresent) {
-
+                return queriesManager.getLegObstacleTypeToDistance(firstNodeId, secondNodeId).flatMap { obstacleToDistance ->
+                    removeObstacleFromLegAndUpdateDB(obstacleToDistance,
+                            relativeDistances.get().distanceFromFirstNode,
+                            firstNodeId,
+                            secondNodeId).flatMap {
+                        //the obstacle wasn't in the leg from firstnode to second node
+                        if (!it) {
+                            removeObstacleFromLegAndUpdateDB(obstacleToDistance,
+                                    relativeDistances.get().distanceFromSecondNode,
+                                    secondNodeId,
+                                    firstNodeId)
+                        } else {
+                            Mono.just(true)
+                        }
+                    }
+                }
             }
         }
+        return Mono.just(false)
     }
 
     @PostMapping("/evaluations")
