@@ -1,27 +1,46 @@
 package it.unibo.yahm.server.controllers
 
 import it.unibo.yahm.server.maps.MapServices
-import org.neo4j.springframework.data.core.ReactiveNeo4jClient
 import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
 import it.unibo.yahm.server.controllers.RoadsController.PositionAndObstacleType
 import it.unibo.yahm.server.entities.*
-import org.neo4j.driver.Record
-import org.neo4j.driver.summary.ResultSummary
-import org.neo4j.springframework.data.core.fetchAs
+import it.unibo.yahm.server.maps.NearestService
+import it.unibo.yahm.server.utils.DBQueries
 
+/**
+ * A controller based on streams that manages clients data insertions.
+ *
+ * @property streamToObserve the stream to observe. The data of the stream are the clients' insertions requests.
+ * @property mapServices manage requests to OpenStreetMap Api.
+ * @property queriesManager bunch of queries.
+ */
 class InputStreamLegController(private val streamToObserve: EmitterProcessor<RoadsController.ClientIdAndEvaluations>,
                                private val mapServices: MapServices,
-                               private val client: ReactiveNeo4jClient) {
+                               private val queriesManager: DBQueries) {
 
+    /**
+     * Observe the stream in order to insert incoming data on the DB.
+     */
     fun observe() {
+        /**
+         * A representation of an obstacle on road.
+         *
+         * @property onRoadLocation the coordinate (on road) of the obstacle.
+         * @property obstacleType the obstacle type.
+         */
         data class OnRoadObstacle(
                 val onRoadLocation: Coordinate,
-                val obstacle: ObstacleType
+                val obstacleType: ObstacleType
         )
-
+        /**
+         * Turns a list of nodes into a stream of nodes pair (this pair is composed by node i and i+1)
+         *
+         * @property nodes the list of nodes.
+         * @return the stream of nodes pairs.
+         */
         fun getFromNodeToNodePair(nodes: List<Node>): Flux<Pair<Node, Node>> {
             val fromToNodesPair: MutableList<Pair<Node, Node>> = mutableListOf()
             nodes.forEachIndexed { index, node ->
@@ -32,36 +51,52 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Roa
             return Flux.fromIterable(fromToNodesPair)
         }
 
+        /**
+         * Turns a list of obstacles type and position (out of road) into a map from pair of node's id to the list of obstacles on road.
+         * @property obstacles the list of obstacles out of road.
+         * @return a map from node's id to list of obstacles on road.
+         */
         fun getObstaclesAdjacentPoints(obstacles: List<PositionAndObstacleType>)
                 : Map<Pair<Long, Long>, MutableList<OnRoadObstacle>> {
             val resultMap: MutableMap<Pair<Long, Long>, MutableList<OnRoadObstacle>> = mutableMapOf()
-            obstacles.mapNotNull {
-                val result = mapServices.findNearestNodes(it.coordinates, number = 1)
-                if (result != null) Pair(it.obstacleType, result.waypoints[0]) else null
-            }.forEach {
-                val nearestNodeId = it.second.nodes
+            fun addNodePairAndRelativeObstaclesToResult(obstacleTypeBetweenNodes: Pair<ObstacleType, NearestService.Waypoint>){
+                val nearestNodeId = obstacleTypeBetweenNodes.second.nodes
                 val keyPair = Pair(nearestNodeId[0], nearestNodeId[1])
-                val obstacleRoadPoint = Coordinate(it.second.location[1], it.second.location[0]) //lat, long
-                val onRoadObstacle = OnRoadObstacle(obstacleRoadPoint, it.first)
+                val obstacleRoadPoint = Coordinate(obstacleTypeBetweenNodes.second.location[1], obstacleTypeBetweenNodes.second.location[0]) //lat, long
+                val onRoadObstacle = OnRoadObstacle(obstacleRoadPoint, obstacleTypeBetweenNodes.first)
                 val actualStoredValue = resultMap.putIfAbsent(keyPair, mutableListOf(onRoadObstacle))
                 if (actualStoredValue != null) {
                     resultMap[keyPair]!!.add(onRoadObstacle)
                 }
             }
+            obstacles.mapNotNull {
+                val result = mapServices.findNearestNodes(it.coordinates, number = 1)
+                if (result != null) Pair(it.obstacleType, result.waypoints[0]) else null
+            }.forEach {
+                addNodePairAndRelativeObstaclesToResult(it)
+            }
             return resultMap
         }
 
-        fun getStartEndDistancesAndObstacles(obstaclesAdjacentPoints: Map<Pair<Long, Long>, MutableList<OnRoadObstacle>>,
-                                             element: Pair<Node, Node>)
+        /**
+         * Returns a list of obstacle type and the distance of the obstacle from the first (start) adjacent nodes.
+         *
+         * @property obstaclesAdjacentPoints a map from node's id to list of obstacles on road.
+         * @property element a from node to node element.
+         * @return a list of pair in which every obstacle type is associated with his distance from the first adjacent node.
+         */
+        fun getObstacleDistanceFromStartAndType(obstaclesAdjacentPoints: Map<Pair<Long, Long>, MutableList<OnRoadObstacle>>,
+                                                element: Pair<Node, Node>)
                 : List<Pair<ObstacleType, Double>> {
             val standardKey = Pair(element.first.id!!, element.second.id!!)
             val reverseKey = Pair(element.second.id!!, element.first.id!!)
             return obstaclesAdjacentPoints.getOrDefault(
                     standardKey,
                     obstaclesAdjacentPoints.getOrDefault(reverseKey, mutableListOf())
-            ).map { Pair(it.obstacle, element.first.coordinates.distanceTo(it.onRoadLocation)) }
+            ).map { Pair(it.obstacleType, element.first.coordinates.distanceTo(it.onRoadLocation)) }
         }
 
+        //TODO: Refactor this code
         streamToObserve
                 .subscribeOn(Schedulers.single())
                 .flatMap { it ->
@@ -77,7 +112,7 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Roa
                         val quality = it.qualities[snappedNodesWithIndex.t1.toInt()]
                         val fromNodeToNodePair = getFromNodeToNodePair(snappedNodesWithIndex.t2)
                         fromNodeToNodePair.flatMap { fromNodeToNode ->
-                            val startEndDistancesAndObstacles = getStartEndDistancesAndObstacles(obstaclesAdjacentPoints, fromNodeToNode)
+                            val startEndDistancesAndObstacles = getObstacleDistanceFromStartAndType(obstaclesAdjacentPoints, fromNodeToNode)
                             val obstacleTypeToRelativeDistances: MutableMap<String, MutableList<Double>> = mutableMapOf()
                             val distanceFromPoints = fromNodeToNode.first.coordinates.distanceTo(fromNodeToNode.second.coordinates)
                             startEndDistancesAndObstacles.forEach { obstacleTypeAndDistance ->
@@ -86,13 +121,13 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Roa
                                         .putIfAbsent(obstacleTypeAndDistance.first.toString(), mutableListOf(relativeDistance))
                                 if (actualStoredDistances != null) {
                                     actualStoredDistances.add(relativeDistance)
-                                    obstacleTypeToRelativeDistances.put(obstacleTypeAndDistance.first.toString(), actualStoredDistances)
+                                    obstacleTypeToRelativeDistances[obstacleTypeAndDistance.first.toString()] = actualStoredDistances
                                 }
                             }
-                            getLegInformation(fromNodeToNode.first.id!!, fromNodeToNode.second.id!!)
+                            queriesManager.getLegObstacleTypeToDistance(fromNodeToNode.first.id!!, fromNodeToNode.second.id!!)
                                     .switchIfEmpty(Mono.just(mapOf()))
-                                    .map { onDBDistances -> filterDistances(onDBDistances, obstacleTypeToRelativeDistances, distanceFromPoints) }
-                                    .flatMap { createOrUpdateQuality(fromNodeToNode.first, fromNodeToNode.second, quality, it) }
+                                    .map { onDBDistances -> aggregateDistances(onDBDistances, obstacleTypeToRelativeDistances, distanceFromPoints) }
+                                    .flatMap { queriesManager.createOrUpdateQuality(fromNodeToNode.first, fromNodeToNode.second, quality, it) }
                         }
                     }
                 }.subscribe {
@@ -100,57 +135,16 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Roa
                 }
     }
 
-    private fun createOrUpdateQuality(firstNode: Node, secondNode: Node, quality: Quality, obstacles: Map<String, List<Double>>): Mono<ResultSummary> {
-        fun getQueryString(): String{
-            val qualityValue = quality.value
-            val queryFirstPart = "MERGE (a:Node{id:${firstNode.id}, coordinates: point({ longitude: ${firstNode.coordinates.longitude}, latitude:${firstNode.coordinates.latitude}})}) \n" +
-                    "MERGE (b:Node{id:${secondNode.id}, coordinates: point({ longitude: ${secondNode.coordinates.longitude}, latitude:${secondNode.coordinates.latitude}})}) \n" +
-                    "MERGE (a)-[s:LEG]->(b)\n"
-            return if(obstacles.isNotEmpty()){
-                val mapToString = obstacles
-                        .entries
-                        .joinToString(separator = ",")
-                        { it.key + ": " + it.value.joinToString(",", "[", "]") }
-                queryFirstPart +
-                        "ON CREATE SET s = {quality: $qualityValue, $mapToString \n}" +
-                        "ON MATCH SET s = {quality: s.quality * (1 - $NEW_QUALITY_WEIGHT) + $qualityValue * $NEW_QUALITY_WEIGHT, $mapToString}"
-            } else {
-                queryFirstPart+
-                        "ON CREATE SET s = {quality: $qualityValue\n}" +
-                        "ON MATCH SET s = {quality: s.quality * (1 - $NEW_QUALITY_WEIGHT) + $qualityValue * $NEW_QUALITY_WEIGHT}"
-            }
-        }
-
-        return client.query(getQueryString())
-                .run()
-    }
-
-    private fun getLegInformation(firstNodeId: Long, secondNodeId: Long): Mono<Map<String, List<Double>>> {
-
-        fun mapObstacleTypeToDistance(record: Record): Map<String, List<Double>> {
-            val toReturnMap = mutableMapOf<String, List<Double>>()
-            val leg = record["leg"].asRelationship()
-            ObstacleType.values().forEach {
-                val optionalRelativeDistances = leg[it.toString()]
-                if (!optionalRelativeDistances.isNull) {
-                    toReturnMap.put(it.toString(), optionalRelativeDistances.asList { it.asDouble() })
-                }
-
-            }
-            return toReturnMap
-        }
-
-        return client.query("MATCH (a:Node{id:$firstNodeId})-[leg:LEG]->(b:Node{id:$secondNodeId}) RETURN leg")
-                .fetchAs<Map<String, List<Double>>>()
-                .mappedBy { _, record ->
-                    mapObstacleTypeToDistance(record)
-                }
-                .first()
-    }
-
-    private fun filterDistances(onDBDistances: Map<String, List<Double>>,
-                                toBeInsertedDistances: Map<String, List<Double>>,
-                                segmentLength: Double): Map<String, List<Double>> {
+    /**
+     * Aggregates the obstacles relative distances on the DB with the distances to be inserted.
+     *
+     * @property onDBDistances a map from each obstacle type to relative distances. This data are stored on DB.
+     * @property toBeInsertedDistances a map from each obstacle type to relative distances. This data are going to be inserted.
+     * @property segmentLength the leg, that contains obstacles, length.
+     */
+    private fun aggregateDistances(onDBDistances: Map<String, List<Double>>,
+                                   toBeInsertedDistances: Map<String, List<Double>>,
+                                   segmentLength: Double): Map<String, List<Double>> {
 
         fun mergeListElement(list: List<Double>): List<Double> {
             fun aggregateElementIfListIsNonEmpty(toAggregateNumberList: MutableList<Double>,

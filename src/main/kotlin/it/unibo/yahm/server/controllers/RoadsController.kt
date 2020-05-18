@@ -2,36 +2,26 @@ package it.unibo.yahm.server.controllers
 
 import it.unibo.yahm.server.entities.Coordinate
 import it.unibo.yahm.server.entities.Leg
-import it.unibo.yahm.server.entities.Node
 import it.unibo.yahm.server.entities.ObstacleType
 import it.unibo.yahm.server.entities.Quality
 import it.unibo.yahm.server.maps.MapServices
-import it.unibo.yahm.server.utils.calculateIntermediatePoint
-import org.neo4j.driver.Record
+import it.unibo.yahm.server.utils.DBQueries
 import org.neo4j.springframework.data.core.ReactiveNeo4jClient
-import org.neo4j.springframework.data.core.fetchAs
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Flux
-import reactor.core.publisher.Mono
 import java.util.*
-import kotlin.math.round
 
 @RestController
 @RequestMapping("/roads")
 class RoadsController(private val service: MapServices, private val client: ReactiveNeo4jClient) {
 
     private val inputRequestStream: EmitterProcessor<ClientIdAndEvaluations> = EmitterProcessor.create()
+    private val queriesManager: DBQueries = DBQueries(client)
 
     init {
-        InputStreamLegController(inputRequestStream, service, client).observe()
+        InputStreamLegController(inputRequestStream, service, queriesManager).observe()
     }
-
-    data class PositionSpeedAndRadius(
-            val coordinates: Coordinate,
-            val speed: Int,
-            val radius: Double
-    )
 
     data class PositionAndObstacleType(
             val coordinates: Coordinate,
@@ -47,15 +37,6 @@ class RoadsController(private val service: MapServices, private val client: Reac
             val qualities: List<Quality>
     )
 
-    data class ClientLegInfo(
-            val coordinate: Coordinate,
-            //val timestamp: Long,
-            val radius: Double,
-            //val obstacle: PositionAndObstacleType,
-            val quality: Quality?
-    )
-
-
     @DeleteMapping("/obstacles")
     fun removeObstacle(@RequestParam latitude: Double,
                        @RequestParam longitude: Double,
@@ -64,18 +45,12 @@ class RoadsController(private val service: MapServices, private val client: Reac
                 val distanceFromFirstNode: Double,
                 val distanceFromSecondNode: Double
         )
-        fun getNodeById(id: Long): Mono<Node> {
-            return client.query("MATCH (a:Node{id:$id}) RETURN a").fetchAs<Node>().mappedBy { _, record ->
-                val node = record["a"].asNode()
-                val nodeCoordinates = node["coordinates"].asPoint()
-                Node(node.id(),  Coordinate(nodeCoordinates.y(), nodeCoordinates.x()))
-            }.first()
-        }
+
         fun getRelativeDistanceFromNodes(firstNodeId: Long, secondNodeId: Long, obstacleCoordinate: Coordinate):
                 Optional<RelativeDistances> {
-            val firstNode = getNodeById(firstNodeId).block()
-            val secondNode = getNodeById(secondNodeId).block()
-            return if(firstNode != null && secondNode != null) {
+            val firstNode = queriesManager.getNodeById(firstNodeId).block()
+            val secondNode = queriesManager.getNodeById(secondNodeId).block()
+            return if (firstNode != null && secondNode != null) {
                 val relativeDistanceFromFirstNode = firstNode
                         .coordinates
                         .distanceTo(obstacleCoordinate) / firstNode.coordinates.distanceTo(secondNode.coordinates)
@@ -87,16 +62,18 @@ class RoadsController(private val service: MapServices, private val client: Reac
                 Optional.empty()
             }
         }
-        fun getRelationObstacles(firstNodeId: Long, secondNodeId: Long){
+
+        fun getRelationObstacles(firstNodeId: Long, secondNodeId: Long) {
 
         }
+
         val obstacleCoordinate = Coordinate(latitude, longitude)
         val nearestWaypoints = service.findNearestNodes(obstacleCoordinate, number = 1)
         if (nearestWaypoints != null) {
             val relativeDistances = getRelativeDistanceFromNodes(nearestWaypoints.waypoints[0].nodes[0],
                     nearestWaypoints.waypoints[0].nodes[1],
                     obstacleCoordinate)
-            if(relativeDistances.isPresent){
+            if (relativeDistances.isPresent) {
 
             }
         }
@@ -109,25 +86,27 @@ class RoadsController(private val service: MapServices, private val client: Reac
 
     @GetMapping("/evaluations")
     fun getEvaluationWithinRadius(@RequestParam latitude: Double,
-                                      @RequestParam longitude: Double,
-                                      @RequestParam radius: Double): Flux<Leg> {
-       return client.query("MATCH (begin: Node)-[leg:LEG]->(end: Node) \n" +
-                "WHERE distance(point({latitude: $latitude, longitude: $longitude}), end.coordinates) <= $radius  \n" +
-            "RETURN begin, leg, end").fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all().buffer().flatMap { legs ->
-           val modifyList = legs.groupBy { if(it.from.id!! < it.to.id!!) Pair(it.from.id, it.to.id) else Pair(it.to.id, it.from.id) }.values.map {
-               val firstLeg = it[0]
-               if(it.size == 2) {
-                   val secondLeg = it[1]
-                   firstLeg.quality = (firstLeg.quality+secondLeg.quality)/2
-                   firstLeg.obstacles = (firstLeg.obstacles.asSequence() + secondLeg.obstacles.asSequence())
-                           .distinct()
-                           .groupBy({ it.key }, { it.value })
-                           .mapValues {  (_, values) -> values.flatten() }
-               }
-               firstLeg
-           }
-           Flux.fromIterable(modifyList)
-       }
+                                  @RequestParam longitude: Double,
+                                  @RequestParam radius: Double): Flux<Leg> {
+        fun mergeObstaclesMaps(first: Map<ObstacleType, List<Coordinate>>,
+                               second: Map<ObstacleType, List<Coordinate>>): Map<ObstacleType, List<Coordinate>> {
+            return (first.asSequence() + second.asSequence())
+                    .distinct()
+                    .groupBy({ it.key }, { it.value })
+                    .mapValues { (_, values) -> values.flatten() }
+        }
+        return queriesManager.getEvaluationWithinRadius(latitude, longitude, radius).buffer().flatMap { legs ->
+            val modifyList = legs.groupBy { if (it.from.id!! < it.to.id!!) Pair(it.from.id, it.to.id) else Pair(it.to.id, it.from.id) }.values.map {
+                val firstLeg = it[0]
+                if (it.size == 2) {
+                    val secondLeg = it[1]
+                    firstLeg.quality = (firstLeg.quality + secondLeg.quality) / 2
+                    firstLeg.obstacles = mergeObstaclesMaps(firstLeg.obstacles, secondLeg.obstacles)
+                }
+                firstLeg
+            }
+            Flux.fromIterable(modifyList)
+        }
     }
 
     @GetMapping("/evaluations/relative")
@@ -136,31 +115,10 @@ class RoadsController(private val service: MapServices, private val client: Reac
                                                         @RequestParam radius: Double): Flux<Leg> {
         val userPosition = Coordinate(latitude, longitude)
         val userNearestNodeId = service.findNearestNode(userPosition)
-        return if(userNearestNodeId != null) {
-            client.query("MATCH path = (a:Node)-[:LEG  *1..20]->(b: Node) \n" +
-                    "UNWIND NODES(path) AS n WITH path, size(collect(DISTINCT n)) AS testLength " +
-                    "WHERE testLength = LENGTH(path) + 1 AND a.id = $userNearestNodeId AND " +
-                    "distance(a.coordinates, b.coordinates) <= radius \n" +
-                    "WITH relationships(path) as rel_arr \n" +
-                    "UNWIND rel_arr as rel \n" +
-                    "RETURN DISTINCT startNode(rel), rel, endNode(rel)")
-            .fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record)}.all()
+        return if (userNearestNodeId != null) {
+            queriesManager.getEvaluationWithinBoundariesAlongUserDirection(latitude, longitude, radius, userNearestNodeId)
         } else return Flux.empty()
     }
 
-    fun legFromRecord(record: Record): Leg {
-        val leg = record["leg"].asRelationship()
-        val startNode = record["begin"].asNode()
-        val startCoordinates = startNode["coordinates"].asPoint()
-        val endNode = record["end"].asNode()
-        val endCoordinates = endNode["coordinates"].asPoint()
-        val start = Node(startNode.id(),  Coordinate(startCoordinates.y(), startCoordinates.x()))
-        val end = Node(endNode.id(),  Coordinate(endCoordinates.y(), endCoordinates.x()))
-        //val obstacles = emptyMap<ObstacleType, List<Coordinate>>()
-        val obstacles = ObstacleType.values().filter {!leg[it.name].isNull}.map{
-           it to leg[it.name].asList(){ v -> calculateIntermediatePoint( start.coordinates, end.coordinates, v.asDouble()) ?: start.coordinates}
-        }.toMap()
-        val qualityValue = round(leg["quality"].asDouble()).toInt()
-        return Leg(start, end, qualityValue, obstacles)
-    }
+
 }
