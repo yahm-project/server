@@ -48,18 +48,19 @@ class RoadsController(private val service: MapServices, private val client: Reac
 
     private fun removeElementFromListIfPresent(initialList: List<Double>, element: Double): List<Double> {
         val toReturnList = mutableListOf<Double>()
-        var lastIndex = 0
-        for (index in initialList.indices) {
-            val listValue = initialList[index]
-            lastIndex = index
-            println(listValue.round(6.0).toString() + " " + element.round(6.0))
-            if (listValue.round(6.0) != element.round(6.0)) {
-                toReturnList.add(listValue)
-            } else {
-                break
+        if (initialList.size > 0) {
+            var lastIndex = 0
+            for (index in initialList.indices) {
+                val listValue = initialList[index]
+                lastIndex = index
+                if (listValue.round(6.0) != element.round(6.0)) {
+                    toReturnList.add(listValue)
+                } else {
+                    break
+                }
             }
+            toReturnList.addAll(initialList.subList(lastIndex + 1, initialList.size))
         }
-        toReturnList.addAll(initialList.subList(lastIndex + 1, initialList.size))
         return toReturnList
     }
 
@@ -121,10 +122,12 @@ class RoadsController(private val service: MapServices, private val client: Reac
                             secondNodeId).flatMap {
                         //the obstacle wasn't in the leg from firstnode to second node
                         if (!it) {
-                            removeObstacleFromLegAndUpdateDB(obstacleToDistance,
-                                    relativeDistances.get().distanceFromSecondNode,
-                                    secondNodeId,
-                                    firstNodeId)
+                            queriesManager.getLegObstacleTypeToDistance(secondNodeId, firstNodeId).flatMap { obstacleToDistance ->
+                                removeObstacleFromLegAndUpdateDB(obstacleToDistance,
+                                        relativeDistances.get().distanceFromSecondNode,
+                                        secondNodeId,
+                                        firstNodeId)
+                            }
                         } else {
                             Mono.just(true)
                         }
