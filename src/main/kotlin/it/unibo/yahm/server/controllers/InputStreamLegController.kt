@@ -96,7 +96,31 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Roa
             ).map { Pair(it.obstacleType, element.first.coordinates.distanceTo(it.onRoadLocation)) }
         }
 
-        //TODO: Refactor this code
+        /**
+         *  Returns a map from obstacle type to relative distance of each instance in a specified road segment.
+         *
+         *  @property distanceFromPoints the road segment length.
+         *  @property obstaclesAdjacentPoints a map from a road segment (two adjacent points) to the list of obstacle inside it.
+         *  @property fromNodeToNode the ends node of the segment.
+         *  @return a map from obstacle type to relative distance of each instance in a specified road segment.
+         */
+        fun getObstacleTypeToRelativeDistances(distanceFromPoints: Double,
+                                               obstaclesAdjacentPoints:  Map<Pair<Long, Long>, MutableList<OnRoadObstacle>>,
+                                               fromNodeToNode: Pair<Node, Node>): MutableMap<String, MutableList<Double>>{
+            val startEndDistancesAndObstacles = getObstacleDistanceFromStartAndType(obstaclesAdjacentPoints, fromNodeToNode)
+            val obstacleTypeToRelativeDistances: MutableMap<String, MutableList<Double>> = mutableMapOf()
+            startEndDistancesAndObstacles.forEach { obstacleTypeAndDistance ->
+                val relativeDistance = obstacleTypeAndDistance.second / distanceFromPoints
+                val actualStoredDistances = obstacleTypeToRelativeDistances
+                        .putIfAbsent(obstacleTypeAndDistance.first.toString(), mutableListOf(relativeDistance))
+                if (actualStoredDistances != null) {
+                    actualStoredDistances.add(relativeDistance)
+                    obstacleTypeToRelativeDistances[obstacleTypeAndDistance.first.toString()] = actualStoredDistances
+                }
+            }
+            return obstacleTypeToRelativeDistances
+        }
+
         streamToObserve
                 .subscribeOn(Schedulers.single())
                 .flatMap { it ->
@@ -112,18 +136,8 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Roa
                         val quality = it.qualities[snappedNodesWithIndex.t1.toInt()]
                         val fromNodeToNodePair = getFromNodeToNodePair(snappedNodesWithIndex.t2)
                         fromNodeToNodePair.flatMap { fromNodeToNode ->
-                            val startEndDistancesAndObstacles = getObstacleDistanceFromStartAndType(obstaclesAdjacentPoints, fromNodeToNode)
-                            val obstacleTypeToRelativeDistances: MutableMap<String, MutableList<Double>> = mutableMapOf()
                             val distanceFromPoints = fromNodeToNode.first.coordinates.distanceTo(fromNodeToNode.second.coordinates)
-                            startEndDistancesAndObstacles.forEach { obstacleTypeAndDistance ->
-                                val relativeDistance = obstacleTypeAndDistance.second / distanceFromPoints
-                                val actualStoredDistances = obstacleTypeToRelativeDistances
-                                        .putIfAbsent(obstacleTypeAndDistance.first.toString(), mutableListOf(relativeDistance))
-                                if (actualStoredDistances != null) {
-                                    actualStoredDistances.add(relativeDistance)
-                                    obstacleTypeToRelativeDistances[obstacleTypeAndDistance.first.toString()] = actualStoredDistances
-                                }
-                            }
+                            val obstacleTypeToRelativeDistances = getObstacleTypeToRelativeDistances(distanceFromPoints, obstaclesAdjacentPoints, fromNodeToNode)
                             queriesManager.getLegObstacleTypeToDistance(fromNodeToNode.first.id!!, fromNodeToNode.second.id!!)
                                     .switchIfEmpty(Mono.just(mapOf()))
                                     .map { onDBDistances -> aggregateDistances(onDBDistances, obstacleTypeToRelativeDistances, distanceFromPoints) }
