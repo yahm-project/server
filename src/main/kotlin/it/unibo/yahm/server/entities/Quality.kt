@@ -1,13 +1,12 @@
 package it.unibo.yahm.server.entities
 
-import java.lang.reflect.Type
 
 enum class Quality(val value: Int) {
-    QUALITY0(0),
-    QUALITY1(1),
-    QUALITY2(2),
-    QUALITY3(3),
-    QUALITY4(4);
+    VERY_BAD(0),
+    BAD(1),
+    OK(2),
+    GOOD(3),
+    PERFECT(4);
 
     companion object {
         private val map = values().associateBy(Quality::value)

@@ -1,5 +1,6 @@
 package it.unibo.yahm.server.controllers
 
+import com.fasterxml.jackson.annotation.JsonAlias
 import it.unibo.yahm.server.entities.Coordinate
 import it.unibo.yahm.server.entities.Leg
 import it.unibo.yahm.server.entities.ObstacleType
@@ -28,6 +29,7 @@ class RoadsController(private val service: MapServices, private val client: Reac
 
     data class PositionAndObstacleType(
             val coordinates: Coordinate,
+            @JsonAlias("obstacle_type")
             val obstacleType: ObstacleType
     )
 
@@ -48,7 +50,7 @@ class RoadsController(private val service: MapServices, private val client: Reac
 
     private fun removeElementFromListIfPresent(initialList: List<Double>, element: Double): List<Double> {
         val toReturnList = mutableListOf<Double>()
-        if (initialList.size > 0) {
+        if (initialList.isNotEmpty()) {
             var lastIndex = 0
             for (index in initialList.indices) {
                 val listValue = initialList[index]
@@ -175,7 +177,7 @@ class RoadsController(private val service: MapServices, private val client: Reac
         val userPosition = Coordinate(latitude, longitude)
         val userNearestNodeId = service.findNearestNode(userPosition)
         return if (userNearestNodeId != null) {
-            queriesManager.getEvaluationWithinBoundariesAlongUserDirection(latitude, longitude, radius, userNearestNodeId)
+            queriesManager.getEvaluationWithinBoundariesAlongUserDirection(radius, userNearestNodeId)
         } else return Flux.empty()
     }
 

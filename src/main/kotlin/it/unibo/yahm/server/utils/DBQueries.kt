@@ -50,9 +50,9 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
     }
 
     fun updateLegObstacles(firstNodeId: Long, secondNodeId: Long, obstacles: Pair<String, List<Double>>): Mono<ResultSummary> {
-       return client.query("MATCH (a:Node{id:$firstNodeId})-[leg:LEG]->(b:Node{id:$secondNodeId})\n" +
+        return client.query("MATCH (a:Node{id:$firstNodeId})-[leg:LEG]->(b:Node{id:$secondNodeId})\n" +
                 "SET leg.${obstacles.first} = ${obstacles.second}")
-               .run()
+                .run()
     }
 
     fun getLegObstacleTypeToDistance(firstNodeId: Long, secondNodeId: Long): Mono<Map<String, List<Double>>> {
@@ -95,7 +95,7 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
         val start = Node(startNode.id(), Coordinate(startCoordinates.y(), startCoordinates.x()))
         val end = Node(endNode.id(), Coordinate(endCoordinates.y(), endCoordinates.x()))
         val obstacles = ObstacleType.values().filter { !leg[it.name].isNull }.map {
-            it to leg[it.name].asList() { v ->
+            it to leg[it.name].asList { v ->
                 calculateIntermediatePoint(start.coordinates, end.coordinates, v.asDouble()) ?: start.coordinates
             }
         }.toMap()
@@ -109,17 +109,15 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
                 "RETURN begin, leg, end").fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all()
     }
 
-    fun getEvaluationWithinBoundariesAlongUserDirection(latitude: Double,
-                                                        longitude: Double,
-                                                        radius: Double,
+    fun getEvaluationWithinBoundariesAlongUserDirection(radius: Double,
                                                         userNearestNodeId: Long): Flux<Leg> {
-        return client.query("MATCH path = (a:Node)-[:LEG  *1..20]->(b: Node) \n" +
-                "UNWIND NODES(path) AS n WITH path, size(collect(DISTINCT n)) AS testLength " +
-                "WHERE testLength = LENGTH(path) + 1 AND a.id = $userNearestNodeId AND " +
-                "distance(a.coordinates, b.coordinates) <= radius \n" +
-                "WITH relationships(path) as rel_arr \n" +
-                "UNWIND rel_arr as rel \n" +
-                "RETURN DISTINCT startNode(rel), rel, endNode(rel)")
-                .fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all()
+        return client.query("""
+            MATCH path = (a:Node)-[:LEG  *1..20]->(b: Node)
+            WHERE a.id = $userNearestNodeId AND distance(a.coordinates, b.coordinates) <= $radius
+            UNWIND NODES(path) AS n WITH path, size(collect(DISTINCT n)) AS testLength WHERE testLength = LENGTH(path) + 1
+            WITH relationships(path) as rel_arr
+            UNWIND rel_arr as rel
+            RETURN DISTINCT startNode(rel) as begin, rel as leg, endNode(rel) as end
+        """.trimIndent()).fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all()
     }
 }
