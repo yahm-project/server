@@ -5,6 +5,7 @@ plugins {
     id("io.spring.dependency-management") version "1.0.9.RELEASE"
     kotlin("jvm") version "1.3.71"
     kotlin("plugin.spring") version "1.3.71"
+    application
 }
 
 group = "it.unibo.yahm"
@@ -37,4 +38,8 @@ tasks.withType<KotlinCompile> {
         freeCompilerArgs = listOf("-Xjsr305=strict")
         jvmTarget = "1.8"
     }
+}
+
+application {
+    mainClassName = "it.unibo.yahm.server.ServerApplicationKt"
 }
