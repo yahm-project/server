@@ -45,8 +45,7 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
             return queryFirstPart + getQuerySecondPartString(obstaclesMapToOptionalString)
         }
 
-        return client.query(getQueryString())
-                .run()
+        return client.query(getQueryString()).run()
     }
 
     fun updateLegObstacles(firstNodeId: Long, secondNodeId: Long, obstacles: Pair<String, List<Double>>): Mono<ResultSummary> {
@@ -87,6 +86,25 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
         }.first()
     }
 
+
+
+    fun getEvaluationWithinRadius(latitude: Double, longitude: Double, radius: Double): Flux<Leg> {
+        return client.query("MATCH (begin: Node)-[leg:LEG]->(end: Node) \n" +
+                "WHERE distance(point({latitude: $latitude, longitude: $longitude}), end.coordinates) <= $radius  \n" +
+                "RETURN begin, leg, end").fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all()
+    }
+
+    fun getEvaluationsWithinBoundariesAlongUserDirection(radius: Double, userNearestNodeId: Long): Flux<Leg> {
+        return client.query("""
+            MATCH path = (a:Node)-[:LEG *1..20]->(b:Node)
+            WHERE a.id = $userNearestNodeId AND distance(a.coordinates, b.coordinates) <= $radius
+            UNWIND NODES(path) AS n WITH path, size(collect(DISTINCT n)) AS testLength WHERE testLength = LENGTH(path) + 1
+            WITH relationships(path) as rel_arr
+            UNWIND rel_arr as rel
+            RETURN DISTINCT startNode(rel) as begin, rel as leg, endNode(rel) as end
+        """.trimIndent()).fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all()
+    }
+
     private fun legFromRecord(record: Record): Leg {
         val leg = record["leg"].asRelationship()
         val startNode = record["begin"].asNode()
@@ -104,21 +122,4 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
         return Leg(start, end, qualityValue, obstacles)
     }
 
-    fun getEvaluationWithinRadius(latitude: Double, longitude: Double, radius: Double): Flux<Leg> {
-        return client.query("MATCH (begin: Node)-[leg:LEG]->(end: Node) \n" +
-                "WHERE distance(point({latitude: $latitude, longitude: $longitude}), end.coordinates) <= $radius  \n" +
-                "RETURN begin, leg, end").fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all()
-    }
-
-    fun getEvaluationWithinBoundariesAlongUserDirection(radius: Double,
-                                                        userNearestNodeId: Long): Flux<Leg> {
-        return client.query("""
-            MATCH path = (a:Node)-[:LEG  *1..20]->(b: Node)
-            WHERE a.id = $userNearestNodeId AND distance(a.coordinates, b.coordinates) <= $radius
-            UNWIND NODES(path) AS n WITH path, size(collect(DISTINCT n)) AS testLength WHERE testLength = LENGTH(path) + 1
-            WITH relationships(path) as rel_arr
-            UNWIND rel_arr as rel
-            RETURN DISTINCT startNode(rel) as begin, rel as leg, endNode(rel) as end
-        """.trimIndent()).fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all()
-    }
 }

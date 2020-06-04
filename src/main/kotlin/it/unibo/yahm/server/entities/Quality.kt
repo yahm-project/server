@@ -7,9 +7,4 @@ enum class Quality(val value: Int) {
     OK(2),
     GOOD(3),
     PERFECT(4);
-
-    companion object {
-        private val map = values().associateBy(Quality::value)
-        fun fromValue(value: Int) = map[value]
-    }
 }

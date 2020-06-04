@@ -11,6 +11,7 @@ import org.springframework.web.client.RestTemplate
 import org.springframework.web.client.getForObject
 import org.springframework.web.client.postForObject
 
+
 @Component
 class MapServices(private val applicationConfig: ApplicationConfig) {
 
@@ -33,13 +34,6 @@ class MapServices(private val applicationConfig: ApplicationConfig) {
         }
     }
 
-    fun snapToRoadCoordinates(coordinates: List<Coordinate>, timestamps: List<Long> = emptyList(),
-                              radiuses: List<Double> = emptyList()): List<Coordinate>? {
-        return snapToRoad(coordinates, timestamps, radiuses)?.matchings?.flatMap { matching ->
-            PolylineUtils.decode(matching.geometry).map { Coordinate(it.latitude, it.longitude) }
-        }
-    }
-
     fun snapToRoad(coordinates: List<Coordinate>, timestamps: List<Long> = emptyList(),
                    radiuses: List<Double> = emptyList(), waypoints: List<Long> = emptyList(),
                    options: MatchService.Options = MatchService.Options()): MatchService.Result? {
@@ -57,6 +51,7 @@ class MapServices(private val applicationConfig: ApplicationConfig) {
         } catch (badRequest: HttpClientErrorException.BadRequest) {
             if (badRequest.responseBodyAsString != "{\"code\":\"NoSegment\"}") {
                 logger.error("Match service invalid query: ${badRequest.responseBodyAsString}")
+                logger.info("Query: $sb")
             }
             null
         } catch (e: Exception) {

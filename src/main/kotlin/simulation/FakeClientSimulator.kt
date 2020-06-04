@@ -1,7 +1,7 @@
 package simulation
 
-import it.unibo.yahm.server.controllers.RoadsController
 import it.unibo.yahm.server.entities.Coordinate
+import it.unibo.yahm.server.entities.Evaluations
 import it.unibo.yahm.server.entities.Quality
 import org.springframework.web.client.RestTemplate
 import org.springframework.web.client.postForObject
@@ -20,25 +20,25 @@ class FakeClientSimulator(inputSource: File, private val bufferSize: Int = 15,
 
     fun doSimulation() {
         Flux.fromStream(reader.lines())
-                .subscribeOn(Schedulers.newSingle("simulation"))
-                .skip(1) // skip header
-                .map { it.split(",") }
-                .buffer(bufferSize, bufferSize - 1)
-                .delayElements(Duration.ofSeconds(delayBetweenRequests))
-                .subscribe({buf ->
-                    println("Sending elements..")
-                    restTemplate.postForObject<Void?>(url, RoadsController.ClientIdAndEvaluations(
-                            "FakeClientSimulator",
-                            buf.map { Coordinate(it[0].toDouble(), it[1].toDouble()) },
-                            buf.map { it[2].toDouble() },
-                            emptyList(),
-                            buf.take(bufferSize - 1).map { Quality.valueOf(it[4]) }
-                    ))
-                }, {
-                    it.printStackTrace()
-                }, {
-                    reader.close()
-                })
+            .subscribeOn(Schedulers.newSingle("simulation"))
+            .skip(1) // skip header
+            .map { it.split(",") }
+            .buffer(bufferSize, bufferSize - 1)
+            .delayElements(Duration.ofSeconds(delayBetweenRequests))
+            .subscribe({buf ->
+                println("Sending elements..")
+                restTemplate.postForObject<Void?>(url, Evaluations(
+                        buf.map { Coordinate(it[0].toDouble(), it[1].toDouble()) },
+                        emptyList(),
+                        buf.map { it[2].toDouble() },
+                        emptyList(),
+                        buf.take(bufferSize - 1).map { Quality.valueOf(it[4]) }
+                ))
+            }, {
+                it.printStackTrace()
+            }, {
+                reader.close()
+            })
     }
 
 }

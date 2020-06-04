@@ -1,14 +1,18 @@
 package it.unibo.yahm.server.controllers
 
+import it.unibo.yahm.server.controllers.RoadsController.PositionAndObstacleType
+import it.unibo.yahm.server.entities.Coordinate
+import it.unibo.yahm.server.entities.Evaluations
+import it.unibo.yahm.server.entities.Node
+import it.unibo.yahm.server.entities.ObstacleType
 import it.unibo.yahm.server.maps.MapServices
+import it.unibo.yahm.server.maps.NearestService
+import it.unibo.yahm.server.utils.DBQueries
 import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
-import it.unibo.yahm.server.controllers.RoadsController.PositionAndObstacleType
-import it.unibo.yahm.server.entities.*
-import it.unibo.yahm.server.maps.NearestService
-import it.unibo.yahm.server.utils.DBQueries
+
 
 /**
  * A controller based on streams that manages clients data insertions.
@@ -17,7 +21,7 @@ import it.unibo.yahm.server.utils.DBQueries
  * @property mapServices manage requests to OpenStreetMap Api.
  * @property queriesManager bunch of queries.
  */
-class InputStreamLegController(private val streamToObserve: EmitterProcessor<RoadsController.ClientIdAndEvaluations>,
+class InputStreamLegController(private val streamToObserve: EmitterProcessor<Evaluations>,
                                private val mapServices: MapServices,
                                private val queriesManager: DBQueries) {
 
@@ -35,21 +39,7 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Roa
                 val onRoadLocation: Coordinate,
                 val obstacleType: ObstacleType
         )
-        /**
-         * Turns a list of nodes into a stream of nodes pair (this pair is composed by node i and i+1)
-         *
-         * @property nodes the list of nodes.
-         * @return the stream of nodes pairs.
-         */
-        fun getFromNodeToNodePair(nodes: List<Node>): Flux<Pair<Node, Node>> {
-            val fromToNodesPair: MutableList<Pair<Node, Node>> = mutableListOf()
-            nodes.forEachIndexed { index, node ->
-                if (index < nodes.size - 1) {
-                    fromToNodesPair.add(Pair(node, nodes[index + 1]))
-                }
-            }
-            return Flux.fromIterable(fromToNodesPair)
-        }
+
 
         /**
          * Turns a list of obstacles type and position (out of road) into a map from pair of node's id to the list of obstacles on road.
@@ -122,31 +112,30 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Roa
         }
 
         streamToObserve
-                .subscribeOn(Schedulers.single())
-                .flatMap { it ->
-                    val snappedNodesForOriginalNodes = Flux.fromIterable(mapServices
-                            .snapToRoadNodes(
-                                    coordinates = it.coordinates,
-                                    /* { it.timestamp },*/
-                                    radiuses = it.radiuses
-                            )!!)
+            .subscribeOn(Schedulers.single())
+            .flatMap { it ->
+                val snappedNodesForOriginalNodes = Flux.fromIterable(mapServices
+                    .snapToRoadNodes(
+                            coordinates = it.coordinates,
+                            timestamps = it.timestamps,
+                            radiuses = it.radiuses
+                    )!!)
 
-                    val obstaclesAdjacentPoints = getObstaclesAdjacentPoints(it.obstacles)
-                    snappedNodesForOriginalNodes.index().flatMap { snappedNodesWithIndex ->
-                        val quality = it.qualities[snappedNodesWithIndex.t1.toInt()]
-                        val fromNodeToNodePair = getFromNodeToNodePair(snappedNodesWithIndex.t2)
-                        fromNodeToNodePair.flatMap { fromNodeToNode ->
-                            val distanceFromPoints = fromNodeToNode.first.coordinates.distanceTo(fromNodeToNode.second.coordinates)
-                            val obstacleTypeToRelativeDistances = getObstacleTypeToRelativeDistances(distanceFromPoints, obstaclesAdjacentPoints, fromNodeToNode)
-                            queriesManager.getLegObstacleTypeToDistance(fromNodeToNode.first.id!!, fromNodeToNode.second.id!!)
-                                    .switchIfEmpty(Mono.just(mapOf()))
-                                    .map { onDBDistances -> aggregateDistances(onDBDistances, obstacleTypeToRelativeDistances, distanceFromPoints) }
-                                    .flatMap { queriesManager.createOrUpdateQuality(fromNodeToNode.first, fromNodeToNode.second, quality, it) }
-                        }
+                val obstaclesAdjacentPoints = getObstaclesAdjacentPoints(it.obstacles)
+                snappedNodesForOriginalNodes.index().flatMap { snappedNodesWithIndex ->
+                    val quality = it.qualities[snappedNodesWithIndex.t1.toInt()]
+                    Flux.fromIterable(snappedNodesWithIndex.t2.zipWithNext()).flatMap { fromNodeToNode ->
+                        val distanceFromPoints = fromNodeToNode.first.coordinates.distanceTo(fromNodeToNode.second.coordinates)
+                        val obstacleTypeToRelativeDistances = getObstacleTypeToRelativeDistances(distanceFromPoints, obstaclesAdjacentPoints, fromNodeToNode)
+                        queriesManager.getLegObstacleTypeToDistance(fromNodeToNode.first.id!!, fromNodeToNode.second.id!!)
+                                .switchIfEmpty(Mono.just(mapOf()))
+                                .map { onDBDistances -> aggregateDistances(onDBDistances, obstacleTypeToRelativeDistances, distanceFromPoints) }
+                                .flatMap { queriesManager.createOrUpdateQuality(fromNodeToNode.first, fromNodeToNode.second, quality, it) }
                     }
-                }.subscribe {
-                    println(it)
                 }
+            }.subscribe {
+                // pass
+            }
     }
 
     /**

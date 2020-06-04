@@ -1,10 +1,7 @@
 package it.unibo.yahm.server.controllers
 
 import com.fasterxml.jackson.annotation.JsonAlias
-import it.unibo.yahm.server.entities.Coordinate
-import it.unibo.yahm.server.entities.Leg
-import it.unibo.yahm.server.entities.ObstacleType
-import it.unibo.yahm.server.entities.Quality
+import it.unibo.yahm.server.entities.*
 import it.unibo.yahm.server.maps.MapServices
 import it.unibo.yahm.server.utils.DBQueries
 import org.neo4j.springframework.data.core.ReactiveNeo4jClient
@@ -16,11 +13,12 @@ import java.util.*
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
+
 @RestController
 @RequestMapping("/roads")
-class RoadsController(private val service: MapServices, private val client: ReactiveNeo4jClient) {
+class RoadsController(private val service: MapServices, client: ReactiveNeo4jClient) {
 
-    private val inputRequestStream: EmitterProcessor<ClientIdAndEvaluations> = EmitterProcessor.create()
+    private val inputRequestStream: EmitterProcessor<Evaluations> = EmitterProcessor.create()
     private val queriesManager: DBQueries = DBQueries(client)
 
     init {
@@ -31,15 +29,6 @@ class RoadsController(private val service: MapServices, private val client: Reac
             val coordinates: Coordinate,
             @JsonAlias("obstacle_type")
             val obstacleType: ObstacleType
-    )
-
-    data class ClientIdAndEvaluations(
-            val id: String,
-            val coordinates: List<Coordinate>,
-            //val timestamps: List<Long>,
-            val radiuses: List<Double>,
-            val obstacles: List<PositionAndObstacleType>,
-            val qualities: List<Quality>
     )
 
     private fun Double.round(decimalNumber: Double): Double {
@@ -138,8 +127,8 @@ class RoadsController(private val service: MapServices, private val client: Reac
     }
 
     @PostMapping("/evaluations")
-    fun addEvaluations(@RequestBody clientIdAndEvaluations: ClientIdAndEvaluations) {
-        inputRequestStream.onNext(clientIdAndEvaluations)
+    fun addEvaluations(@RequestBody evaluations: Evaluations) {
+        inputRequestStream.onNext(evaluations)
     }
 
     @GetMapping("/evaluations")
@@ -168,13 +157,12 @@ class RoadsController(private val service: MapServices, private val client: Reac
     }
 
     @GetMapping("/evaluations/relative")
-    fun getEvaluationWithinBoundariesAlongUserDirection(@RequestParam latitude: Double,
+    fun getEvaluationsWithinBoundariesAlongUserDirection(@RequestParam latitude: Double,
                                                         @RequestParam longitude: Double,
                                                         @RequestParam radius: Double): Flux<Leg> {
-        val userPosition = Coordinate(latitude, longitude)
-        val userNearestNodeId = service.findNearestNode(userPosition)
+        val userNearestNodeId = service.findNearestNode(Coordinate(latitude, longitude))
         return if (userNearestNodeId != null) {
-            queriesManager.getEvaluationWithinBoundariesAlongUserDirection(radius, userNearestNodeId)
+            queriesManager.getEvaluationsWithinBoundariesAlongUserDirection(radius, userNearestNodeId)
         } else return Flux.empty()
     }
 
