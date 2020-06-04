@@ -50,7 +50,8 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
     }
 
     fun updateLegObstacles(firstNodeId: Long, secondNodeId: Long, obstacles: Pair<String, List<Double>>): Mono<ResultSummary> {
-       return client.query("MATCH (a:Node{id:$firstNodeId})-[leg:LEG]->(b:Node{id:$secondNodeId})\n" +
+       return client.query("MATCH (a:Node)-[leg:LEG]->(b:Node)\n" +
+               "WHERE ID(a) = $firstNodeId AND ID(b) = $secondNodeId\n"+
                 "SET leg.${obstacles.first} = ${obstacles.second}")
                .run()
     }
@@ -70,7 +71,7 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
             return toReturnMap
         }
 
-        return client.query("MATCH (a:Node{id:$firstNodeId})-[leg:LEG]->(b:Node{id:$secondNodeId}) RETURN leg")
+        return client.query("MATCH (a:Node)-[leg:LEG]->(b:Node) WHERE ID(a) = $firstNodeId AND ID(b) = $secondNodeId RETURN leg")
                 .fetchAs<Map<String, List<Double>>>()
                 .mappedBy { _, record ->
                     mapObstacleTypeToDistance(record)
@@ -78,8 +79,8 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
                 .first()
     }
 
-    fun getNodeById(id: Long): Mono<Node> {
-        return client.query("MATCH (a:Node{id:$id}) RETURN a").fetchAs<Node>().mappedBy { _, record ->
+    fun getNodeByNeo4jId(id: Long): Mono<Node> {
+        return client.query("MATCH (a) WHERE ID(a) = $id RETURN a").fetchAs<Node>().mappedBy { _, record ->
             val node = record["a"].asNode()
             val nodeCoordinates = node["coordinates"].asPoint()
             Node(node.id(), Coordinate(nodeCoordinates.y(), nodeCoordinates.x()))

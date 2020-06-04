@@ -67,7 +67,9 @@ class RoadsController(private val service: MapServices, private val client: Reac
     @DeleteMapping("/obstacles")
     fun removeObstacle(@RequestParam latitude: Double,
                        @RequestParam longitude: Double,
-                       @RequestParam obstacleType: ObstacleType): Mono<Boolean> {
+                       @RequestParam obstacleType: ObstacleType,
+                       @RequestParam legFromId: Long,
+                       @RequestParam legToId: Long): Mono<Boolean> {
         data class RelativeDistances(
                 val distanceFromFirstNode: Double,
                 val distanceFromSecondNode: Double
@@ -75,8 +77,8 @@ class RoadsController(private val service: MapServices, private val client: Reac
 
         fun getRelativeDistanceFromNodes(firstNodeId: Long, secondNodeId: Long, obstacleCoordinate: Coordinate):
                 Optional<RelativeDistances> {
-            val firstNode = queriesManager.getNodeById(firstNodeId).block()
-            val secondNode = queriesManager.getNodeById(secondNodeId).block()
+            val firstNode = queriesManager.getNodeByNeo4jId(firstNodeId).block()
+            val secondNode = queriesManager.getNodeByNeo4jId(secondNodeId).block()
             return if (firstNode != null && secondNode != null) {
                 val relativeDistanceFromFirstNode = firstNode
                         .coordinates
@@ -107,30 +109,25 @@ class RoadsController(private val service: MapServices, private val client: Reac
         }
 
         val obstacleCoordinate = Coordinate(latitude, longitude)
-        val nearestWaypoints = service.findNearestNodes(obstacleCoordinate, number = 1)
-        if (nearestWaypoints != null) {
-            val firstNodeId = nearestWaypoints.waypoints[0].nodes[0]
-            val secondNodeId = nearestWaypoints.waypoints[0].nodes[1]
-            val relativeDistances = getRelativeDistanceFromNodes(firstNodeId,
-                    secondNodeId,
-                    obstacleCoordinate)
-            if (relativeDistances.isPresent) {
-                return queriesManager.getLegObstacleTypeToDistance(firstNodeId, secondNodeId).flatMap { obstacleToDistance ->
-                    removeObstacleFromLegAndUpdateDB(obstacleToDistance,
-                            relativeDistances.get().distanceFromFirstNode,
-                            firstNodeId,
-                            secondNodeId).flatMap {
-                        //the obstacle wasn't in the leg from firstnode to second node
-                        if (!it) {
-                            queriesManager.getLegObstacleTypeToDistance(secondNodeId, firstNodeId).flatMap { obstacleToDistance ->
-                                removeObstacleFromLegAndUpdateDB(obstacleToDistance,
-                                        relativeDistances.get().distanceFromSecondNode,
-                                        secondNodeId,
-                                        firstNodeId)
-                            }
-                        } else {
-                            Mono.just(true)
+        val relativeDistances = getRelativeDistanceFromNodes(legFromId,
+                legToId,
+                obstacleCoordinate)
+        if (relativeDistances.isPresent) {
+            return queriesManager.getLegObstacleTypeToDistance(legFromId, legToId).flatMap { obstacleToDistance ->
+                removeObstacleFromLegAndUpdateDB(obstacleToDistance,
+                        relativeDistances.get().distanceFromFirstNode,
+                        legFromId,
+                        legToId).flatMap {
+                    //the obstacle wasn't in the leg from firstnode to second node
+                    if (!it) {
+                        queriesManager.getLegObstacleTypeToDistance(legToId, legFromId).flatMap { obstacleToDistance ->
+                            removeObstacleFromLegAndUpdateDB(obstacleToDistance,
+                                    relativeDistances.get().distanceFromSecondNode,
+                                    legToId,
+                                    legFromId)
                         }
+                    } else {
+                        Mono.just(true)
                     }
                 }
             }
