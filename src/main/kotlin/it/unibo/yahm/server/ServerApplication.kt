@@ -1,6 +1,7 @@
 package it.unibo.yahm.server
 
 import it.unibo.yahm.server.commons.ApplicationConfig
+import org.neo4j.springframework.data.core.ReactiveNeo4jClient
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.runApplication
@@ -12,7 +13,17 @@ import org.springframework.web.filter.CorsFilter
 
 @SpringBootApplication
 @EnableConfigurationProperties(ApplicationConfig::class)
-class ServerApplication {
+class ServerApplication(client: ReactiveNeo4jClient) {
+
+    init {
+        println("Creating constraints..")
+        client.query("CREATE CONSTRAINT unique_id ON (n:Node) ASSERT n.id IS UNIQUE").run().subscribe({
+            println("Added ${it.counters().constraintsAdded()} constraints")
+        }, {
+            println("Constraints already exists")
+        })
+    }
+
     @Bean
     fun corsFilter(): CorsFilter? {
         val source = UrlBasedCorsConfigurationSource()
