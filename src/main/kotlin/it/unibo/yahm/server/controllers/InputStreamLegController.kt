@@ -117,7 +117,7 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Eva
                 val snappedNodesForOriginalNodes = Flux.fromIterable(mapServices
                     .snapToRoadNodes(
                             coordinates = it.coordinates,
-                            timestamps = it.timestamps,
+                            // timestamps = it.timestamps,
                             radiuses = it.radiuses
                     )!!)
 
