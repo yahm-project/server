@@ -8,10 +8,13 @@ import it.unibo.yahm.server.entities.ObstacleType
 import it.unibo.yahm.server.maps.MapServices
 import it.unibo.yahm.server.maps.NearestService
 import it.unibo.yahm.server.utils.DBQueries
+import it.unibo.yahm.server.utils.aggregateDistances
 import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
+import kotlin.math.round
+import kotlin.math.roundToInt
 
 
 /**
@@ -129,71 +132,15 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Eva
                         val obstacleTypeToRelativeDistances = getObstacleTypeToRelativeDistances(distanceFromPoints, obstaclesAdjacentPoints, fromNodeToNode)
                         queriesManager.getLegObstacleTypeToDistance(fromNodeToNode.first.id!!, fromNodeToNode.second.id!!)
                                 .switchIfEmpty(Mono.just(mapOf()))
-                                .map { onDBDistances -> aggregateDistances(onDBDistances, obstacleTypeToRelativeDistances, distanceFromPoints) }
+                                .map { onDBDistances ->
+                                    aggregateDistances(onDBDistances, obstacleTypeToRelativeDistances, distanceFromPoints, MINIMUM_DISTANCE_BETWEEN_OBSTACLES_IN_METERS)
+                                }
                                 .flatMap { queriesManager.createOrUpdateQuality(fromNodeToNode.first, fromNodeToNode.second, quality, it) }
                     }
                 }
             }.subscribe {
                 // pass
             }
-    }
-
-    /**
-     * Aggregates the obstacles relative distances on the DB with the distances to be inserted.
-     *
-     * @property onDBDistances a map from each obstacle type to relative distances. This data are stored on DB.
-     * @property toBeInsertedDistances a map from each obstacle type to relative distances. This data are going to be inserted.
-     * @property segmentLength the leg, that contains obstacles, length.
-     */
-    private fun aggregateDistances(onDBDistances: Map<String, List<Double>>,
-                                   toBeInsertedDistances: Map<String, List<Double>>,
-                                   segmentLength: Double): Map<String, List<Double>> {
-
-        fun mergeListElement(list: List<Double>): List<Double> {
-            fun aggregateElementIfListIsNonEmpty(toAggregateNumberList: MutableList<Double>,
-                                                 destinationList: MutableList<Double>): Boolean {
-                return if(toAggregateNumberList.isNotEmpty()){
-                    destinationList.add(toAggregateNumberList.reduce { sum, element -> sum + element } / toAggregateNumberList.size)
-                    toAggregateNumberList.clear()
-                    true
-                } else {
-                    false
-                }
-            }
-            return if (list.isNotEmpty()) {
-                val toReturnList = mutableListOf<Double>()
-                var firstElement = list[0]
-                val toPutTogetherElements = mutableListOf(firstElement)
-                for (index in 1 until list.size) {
-                    val actualElement = list[index]
-                    if ((actualElement - firstElement) * segmentLength < MINIMUM_DISTANCE_BETWEEN_OBSTACLES_IN_METERS) {
-                        toPutTogetherElements.add(actualElement)
-                    } else {
-                        if(!aggregateElementIfListIsNonEmpty(toPutTogetherElements, toReturnList)) {
-                            firstElement = actualElement
-                        }
-                        toReturnList.add(actualElement)
-                    }
-                }
-                aggregateElementIfListIsNonEmpty(toPutTogetherElements, toReturnList)
-                toReturnList
-            } else {
-                list
-            }
-        }
-        return if (toBeInsertedDistances.isNotEmpty()) {
-            val toReturnMap = onDBDistances.toMutableMap()
-            toBeInsertedDistances.entries.forEach {
-                toReturnMap.merge(it.key, mergeListElement(it.value)) { dbDistances, newDistances ->
-                    val toReturnList = dbDistances.toMutableList()
-                    toReturnList.addAll(newDistances)
-                    mergeListElement(toReturnList.distinct().sorted())
-                }
-            }
-            toReturnMap
-        } else {
-            onDBDistances
-        }
     }
 
     companion object {

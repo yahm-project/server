@@ -1,15 +1,45 @@
 package it.unibo.yahm.server.utils
 
+import it.unibo.yahm.server.controllers.InputStreamLegController
+import it.unibo.yahm.server.controllers.InputStreamLegController.Companion.MINIMUM_DISTANCE_BETWEEN_OBSTACLES_IN_METERS
 import it.unibo.yahm.server.entities.Coordinate
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
+import kotlin.math.*
 
+/**
+ * Aggregates the obstacles relative distances on the DB with the distances to be inserted.
+ *
+ * @property onDBDistances a map from each obstacle type to relative distances. This data are stored on DB.
+ * @property toBeInsertedDistances a map from each obstacle type to relative distances. This data are going to be inserted.
+ * @property segmentLength the leg, that contains obstacles, length.
+ */
+fun aggregateDistances(onDBDistances: Map<String, List<Double>>,
+                       toBeInsertedDistances: Map<String, List<Double>>,
+                       segmentLength: Double,
+                       minimumDistanceBetweenObstacles: Int): Map<String, List<Double>> {
+    return if (toBeInsertedDistances.isNotEmpty()) {
+        val toReturnMap = (onDBDistances.asSequence() + toBeInsertedDistances.asSequence())
+                .groupBy({ it.key }, { it.value })
+                .mapValues { (_, values) ->
+                    values
+                            .flatten()
+                            .sorted()
+                            .fold(mutableListOf<Double>(), { accumulator, value ->
+                                if (accumulator.isEmpty() ||
+                                        (value - accumulator.last()) * segmentLength > minimumDistanceBetweenObstacles) {
+                                    accumulator.add(value)
+                                }
+                                accumulator
+                            })
+                }
+        toReturnMap
+    } else {
+        onDBDistances
+    }
+}
 
 fun calculateIntermediatePoint(point1: Coordinate, point2: Coordinate, perc: Double): Coordinate? { //const φ1 = this.lat.toRadians(), λ1 = this.lon.toRadians();
     //const φ2 = point.lat.toRadians(), λ2 = point.lon.toRadians();
-    val lat1: Double =  Math.toRadians(point1.latitude)
+    val lat1: Double = Math.toRadians(point1.latitude)
     val lng1: Double = Math.toRadians(point1.longitude)
     val lat2: Double = Math.toRadians(point2.latitude)
     val lng2: Double = Math.toRadians(point2.longitude)
