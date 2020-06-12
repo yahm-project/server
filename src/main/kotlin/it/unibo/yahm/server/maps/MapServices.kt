@@ -1,5 +1,7 @@
 package it.unibo.yahm.server.maps
 
+import com.github.benmanes.caffeine.cache.Caffeine
+import com.github.benmanes.caffeine.cache.LoadingCache
 import it.unibo.yahm.server.commons.ApplicationConfig
 import it.unibo.yahm.server.entities.Coordinate
 import it.unibo.yahm.server.entities.Node
@@ -10,6 +12,7 @@ import org.springframework.web.client.HttpClientErrorException
 import org.springframework.web.client.RestTemplate
 import org.springframework.web.client.getForObject
 import org.springframework.web.client.postForObject
+import java.util.concurrent.TimeUnit
 
 
 @Component
@@ -20,6 +23,14 @@ class MapServices(private val applicationConfig: ApplicationConfig) {
 
     private val restTemplate = RestTemplate()
     private val logger: Logger = LoggerFactory.getLogger(this.javaClass)
+    private val nodesCoordinateCache: LoadingCache<Set<Long>, Set<Node>>
+
+    init {
+        nodesCoordinateCache = Caffeine.newBuilder()
+                .expireAfterAccess(10, TimeUnit.MINUTES)
+                .maximumSize(100_000)
+                .build { findNodesCoordinates(it) }
+    }
 
     fun snapToRoadNodes(coordinates: List<Coordinate>, timestamps: List<Long> = emptyList(),
                         radiuses: List<Double> = emptyList()): List<List<Node>>? {
@@ -28,7 +39,7 @@ class MapServices(private val applicationConfig: ApplicationConfig) {
             matching.legs.map { it.annotation!!.nodes!! }
         } ?: return null
 
-        val nodes = findNodesCoordinates(legsNodes.flatten().toSet()) ?: return null
+        val nodes = nodesCoordinateCache.get(legsNodes.flatten().toSet()) ?: return null
         return legsNodes.map { leg ->
             leg.map { nodeId -> nodes.find { it.id == nodeId }!! }
         }
