@@ -10,11 +10,8 @@ import it.unibo.yahm.server.maps.NearestService
 import it.unibo.yahm.server.utils.DBQueries
 import it.unibo.yahm.server.utils.aggregateDistances
 import reactor.core.publisher.EmitterProcessor
-import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
-import kotlin.math.round
-import kotlin.math.roundToInt
 
 
 /**
@@ -115,36 +112,48 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Eva
         }
 
         streamToObserve
-            .subscribeOn(Schedulers.single())
-            .flatMap { it ->
-                val snappedNodesForOriginalNodes = Flux.fromIterable(mapServices
-                    .snapToRoadNodes(
-                            coordinates = it.coordinates,
-                            // timestamps = it.timestamps,
-                            radiuses = it.radiuses
-                    )!!)
+            .subscribeOn(Schedulers.newSingle("stretch-processor"))
+            .retry()
+            .subscribe({ it ->
+                val snappedNodesForOriginalNodes = mapServices.snapToRoadNodes(
+                    coordinates = it.coordinates,
+                    radiuses = it.radiuses
+                ) ?: emptyList()
 
                 val obstaclesAdjacentPoints = getObstaclesAdjacentPoints(it.obstacles)
-                snappedNodesForOriginalNodes.index().flatMap { snappedNodesWithIndex ->
-                    val quality = it.qualities[snappedNodesWithIndex.t1.toInt()]
-                    Flux.fromIterable(snappedNodesWithIndex.t2.zipWithNext()).flatMap { fromNodeToNode ->
+                snappedNodesForOriginalNodes.forEachIndexed { index, nodes ->
+                    val quality = it.qualities[index]
+                    nodes.zipWithNext().forEach { fromNodeToNode ->
                         val distanceFromPoints = fromNodeToNode.first.coordinates.distanceTo(fromNodeToNode.second.coordinates)
                         val obstacleTypeToRelativeDistances = getObstacleTypeToRelativeDistances(distanceFromPoints, obstaclesAdjacentPoints, fromNodeToNode)
+
                         queriesManager.getLegObstacleTypeToDistance(fromNodeToNode.first.id!!, fromNodeToNode.second.id!!)
-                                .switchIfEmpty(Mono.just(mapOf()))
-                                .map { onDBDistances ->
-                                    aggregateDistances(onDBDistances, obstacleTypeToRelativeDistances, distanceFromPoints, MINIMUM_DISTANCE_BETWEEN_OBSTACLES_IN_METERS)
+                            .subscribeOn(Schedulers.newSingle("obstacle-updater"))
+                            .switchIfEmpty(Mono.just(mapOf()))
+                            .map { onDBDistances ->
+                                aggregateDistances(onDBDistances, obstacleTypeToRelativeDistances, distanceFromPoints, MINIMUM_DISTANCE_BETWEEN_OBSTACLES_IN_METERS)
+                            }
+                            .retry(RETRY_TIMES_CREATE_UPDATE_QUALITIES)
+                            .subscribe({
+
+                                queriesManager.createOrUpdateQuality(fromNodeToNode.first, fromNodeToNode.second, quality, it).subscribe {
+
                                 }
-                                .flatMap { queriesManager.createOrUpdateQuality(fromNodeToNode.first, fromNodeToNode.second, quality, it) }
+                            }, {
+                                println("Failed to create or update stretch qualities")
+                                it.printStackTrace()
+                            })
                     }
                 }
-            }.subscribe {
-                // pass
-            }
+            }, {
+                println("Failure on input stream leg controller")
+                it.printStackTrace()
+            })
     }
 
     companion object {
         const val NEW_QUALITY_WEIGHT = 0.55
         const val MINIMUM_DISTANCE_BETWEEN_OBSTACLES_IN_METERS = 5
+        const val RETRY_TIMES_CREATE_UPDATE_QUALITIES = 3L
     }
 }
