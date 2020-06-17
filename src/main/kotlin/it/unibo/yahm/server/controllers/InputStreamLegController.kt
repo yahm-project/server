@@ -97,16 +97,13 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Eva
         fun getObstacleTypeToRelativeDistances(distanceFromPoints: Double,
                                                obstaclesAdjacentPoints:  Map<Pair<Long, Long>, MutableList<OnRoadObstacle>>,
                                                fromNodeToNode: Pair<Node, Node>): MutableMap<String, MutableList<Double>>{
-            val startEndDistancesAndObstacles = getObstacleDistanceFromStartAndType(obstaclesAdjacentPoints, fromNodeToNode)
+
+            val startNodeDistancesAndObstacles = getObstacleDistanceFromStartAndType(obstaclesAdjacentPoints, fromNodeToNode)
             val obstacleTypeToRelativeDistances: MutableMap<String, MutableList<Double>> = mutableMapOf()
-            startEndDistancesAndObstacles.forEach { obstacleTypeAndDistance ->
+            startNodeDistancesAndObstacles.forEach { obstacleTypeAndDistance ->
                 val relativeDistance = obstacleTypeAndDistance.second / distanceFromPoints
-                val actualStoredDistances = obstacleTypeToRelativeDistances
-                        .putIfAbsent(obstacleTypeAndDistance.first.toString(), mutableListOf(relativeDistance))
-                if (actualStoredDistances != null) {
-                    actualStoredDistances.add(relativeDistance)
-                    obstacleTypeToRelativeDistances[obstacleTypeAndDistance.first.toString()] = actualStoredDistances
-                }
+                obstacleTypeToRelativeDistances
+                        .putIfAbsent(obstacleTypeAndDistance.first.toString(), mutableListOf(relativeDistance))?.add(relativeDistance)
             }
             return obstacleTypeToRelativeDistances
         }
