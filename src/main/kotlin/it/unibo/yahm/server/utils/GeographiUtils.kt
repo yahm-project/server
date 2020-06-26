@@ -35,7 +35,7 @@ fun aggregateDistances(onDBDistances: Map<String, List<Double>>,
     }
 }
 
-fun calculateIntermediatePoint(point1: Coordinate, point2: Coordinate, perc: Double): Coordinate? {
+fun calculateIntermediatePoint(point1: Coordinate, point2: Coordinate, perc: Double): Coordinate {
     //const φ1 = this.lat.toRadians(), λ1 = this.lon.toRadians();
     //const φ2 = point.lat.toRadians(), λ2 = point.lon.toRadians();
     val lat1: Double = Math.toRadians(point1.latitude)

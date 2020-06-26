@@ -5,6 +5,7 @@ import it.unibo.yahm.server.entities.ObstacleType
 import it.unibo.yahm.server.utils.DBQueries
 import reactor.core.publisher.Mono
 import java.util.*
+import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -89,26 +90,13 @@ class DeleteObstacleHandler(private val queriesManager: DBQueries) {
     }
 
     private fun removeElementFromListIfPresent(initialList: List<Double>, element: Double): List<Double> {
-        val toReturnList = mutableListOf<Double>()
-        if (initialList.isNotEmpty()) {
-            var lastIndex = 0
-            for (index in initialList.indices) {
-                val listValue = initialList[index]
-                lastIndex = index
-                if (listValue.round(6.0) != element.round(6.0)) {
-                    toReturnList.add(listValue)
-                } else {
-                    break
-                }
+        val index = initialList.indexOfFirst { abs(it - element) < 0.000001 }
+        if (index >= 0) {
+            return initialList.toMutableList().apply {
+                removeAt(index)
             }
-            toReturnList.addAll(initialList.subList(lastIndex + 1, initialList.size))
         }
-        return toReturnList
-    }
-
-    private fun Double.round(decimalNumber: Double): Double {
-        val pow = (10.0.pow(decimalNumber))
-        return (this * pow.toInt()).roundToInt() / pow
+        return initialList
     }
 
 }

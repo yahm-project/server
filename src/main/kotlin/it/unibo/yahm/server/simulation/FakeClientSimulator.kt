@@ -1,4 +1,4 @@
-package simulation
+package it.unibo.yahm.server.simulation
 
 import it.unibo.yahm.server.entities.Coordinate
 import it.unibo.yahm.server.entities.Evaluations
@@ -20,7 +20,7 @@ class FakeClientSimulator(inputSource: File, private val bufferSize: Int = 15,
 
     fun doSimulation() {
         Flux.fromStream(reader.lines())
-            .subscribeOn(Schedulers.newSingle("simulation"))
+            .subscribeOn(Schedulers.newSingle("it/unibo/yahm/server/simulation"))
             .skip(1) // skip header
             .map { it.split(",") }
             .buffer(bufferSize, bufferSize - 1)
