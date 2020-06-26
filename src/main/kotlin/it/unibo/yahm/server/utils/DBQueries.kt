@@ -105,21 +105,22 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
         """.trimIndent()).fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all()
     }
 
-    private fun legFromRecord(record: Record): Leg {
-        val leg = record["leg"].asRelationship()
-        val startNode = record["begin"].asNode()
-        val startCoordinates = startNode["coordinates"].asPoint()
-        val endNode = record["end"].asNode()
-        val endCoordinates = endNode["coordinates"].asPoint()
-        val start = Node(startNode.id(), Coordinate(startCoordinates.y(), startCoordinates.x()))
-        val end = Node(endNode.id(), Coordinate(endCoordinates.y(), endCoordinates.x()))
-        val obstacles = ObstacleType.values().filter { !leg[it.name].isNull }.map {
-            it to leg[it.name].asList { v ->
-                calculateIntermediatePoint(start.coordinates, end.coordinates, v.asDouble()) ?: start.coordinates
-            }
-        }.toMap()
-        val qualityValue = round(leg["quality"].asDouble()).toInt()
-        return Leg(start, end, qualityValue, obstacles)
+    companion object {
+        fun legFromRecord(record: Record): Leg {
+            val leg = record["leg"].asRelationship()
+            val startNode = record["begin"].asNode()
+            val startCoordinates = startNode["coordinates"].asPoint()
+            val endNode = record["end"].asNode()
+            val endCoordinates = endNode["coordinates"].asPoint()
+            val start = Node(startNode.id(), Coordinate(startCoordinates.y(), startCoordinates.x()))
+            val end = Node(endNode.id(), Coordinate(endCoordinates.y(), endCoordinates.x()))
+            val obstacles = ObstacleType.values().filter { !leg[it.name].isNull }.map {
+                it to leg[it.name].asList { v ->
+                    calculateIntermediatePoint(start.coordinates, end.coordinates, v.asDouble()) ?: start.coordinates
+                }
+            }.toMap()
+            val qualityValue = round(leg["quality"].asDouble()).toInt()
+            return Leg(start, end, qualityValue, obstacles)
+        }
     }
-
 }
