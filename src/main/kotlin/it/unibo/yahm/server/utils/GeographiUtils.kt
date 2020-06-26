@@ -1,7 +1,5 @@
 package it.unibo.yahm.server.utils
 
-import it.unibo.yahm.server.controllers.InputStreamLegController
-import it.unibo.yahm.server.controllers.InputStreamLegController.Companion.MINIMUM_DISTANCE_BETWEEN_OBSTACLES_IN_METERS
 import it.unibo.yahm.server.entities.Coordinate
 import kotlin.math.*
 
@@ -37,7 +35,8 @@ fun aggregateDistances(onDBDistances: Map<String, List<Double>>,
     }
 }
 
-fun calculateIntermediatePoint(point1: Coordinate, point2: Coordinate, perc: Double): Coordinate? { //const φ1 = this.lat.toRadians(), λ1 = this.lon.toRadians();
+fun calculateIntermediatePoint(point1: Coordinate, point2: Coordinate, perc: Double): Coordinate? {
+    //const φ1 = this.lat.toRadians(), λ1 = this.lon.toRadians();
     //const φ2 = point.lat.toRadians(), λ2 = point.lon.toRadians();
     val lat1: Double = Math.toRadians(point1.latitude)
     val lng1: Double = Math.toRadians(point1.longitude)

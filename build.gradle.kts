@@ -28,6 +28,12 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test") {
         exclude(group = "org.junit.vintage", module = "junit-vintage-engine")
     }
+    testImplementation("org.neo4j.test:neo4j-harness:4.1.0") {
+        exclude(group = "org.slf4j", module = "slf4j-nop")
+    }
+    testImplementation("org.neo4j.springframework.data:spring-data-neo4j-rx-spring-boot-test-autoconfigure:1.1.1")
+    testImplementation("org.testcontainers:junit-jupiter:1.13.0")
+    testImplementation("org.testcontainers:neo4j:1.13.0")
 }
 
 tasks.withType<Test> {

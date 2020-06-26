@@ -1,4 +1,4 @@
-package it.unibo.yahm.server.controllers
+package it.unibo.yahm.server.handlers
 
 import it.unibo.yahm.server.controllers.RoadsController.PositionAndObstacleType
 import it.unibo.yahm.server.entities.Coordinate
@@ -21,9 +21,9 @@ import reactor.core.scheduler.Schedulers
  * @property mapServices manage requests to OpenStreetMap Api.
  * @property queriesManager bunch of queries.
  */
-class InputStreamLegController(private val streamToObserve: EmitterProcessor<Evaluations>,
-                               private val mapServices: MapServices,
-                               private val queriesManager: DBQueries) {
+class AddEvaluationsObservableHandler(private val streamToObserve: EmitterProcessor<Evaluations>,
+                                      private val mapServices: MapServices,
+                                      private val queriesManager: DBQueries) {
 
     /**
      * Observe the stream in order to insert incoming data on the DB.
