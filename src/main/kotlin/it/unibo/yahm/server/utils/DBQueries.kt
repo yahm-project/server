@@ -90,7 +90,8 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
 
     fun getEvaluationWithinRadius(latitude: Double, longitude: Double, radius: Double): Flux<Leg> {
         return client.query("MATCH (begin: Node)-[leg:LEG]->(end: Node) \n" +
-                "WHERE distance(point({latitude: $latitude, longitude: $longitude}), end.coordinates) <= $radius  \n" +
+                "WHERE distance(point({latitude: $latitude, longitude: $longitude}), end.coordinates) <= $radius AND \n" +
+                "distance(point({latitude: $latitude, longitude: $longitude}), begin.coordinates) <= $radius \n" +
                 "RETURN begin, leg, end").fetchAs<Leg>().mappedBy { _, record -> legFromRecord(record) }.all()
     }
 
