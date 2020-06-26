@@ -96,8 +96,8 @@ class TestAddEvaluationsObservableHandler {
         { "The quality of the first street segment does not correspond to the correct one" }
         assert(secondLeg.quality == expectedQuality)
         { "The quality of the second street segment does not correspond to the correct one" }
-        assert(firstLeg.obstacles[ObstacleType.POTHOLE]?.get(0) == SnappedObstacleCoordinate)
-        { "The obstacle of the first street segment does not correspond to the correct one" }
+        assert(firstLeg.obstacles.size == 1 && firstLeg.obstacles[ObstacleType.POTHOLE]?.get(0) == SnappedObstacleCoordinate)
+        { "There is only one obstacle and it is the right one" }
     }
     @Test
     fun testSimpleRoadSegmentInsertion(@Autowired client: ReactiveNeo4jClient,
