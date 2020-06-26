@@ -53,7 +53,7 @@ class MapServices(private val applicationConfig: ApplicationConfig) {
             sb.append(timestamps.joinToString(";", prefix = "&timestamps="))
         }
         if (waypoints.isNotEmpty()) {
-            sb.append(timestamps.joinToString(";", prefix = "&waypoints="))
+            sb.append(waypoints.joinToString(";", prefix = "&waypoints="))
         }
         sb.append(options.toUrlOptions())
 

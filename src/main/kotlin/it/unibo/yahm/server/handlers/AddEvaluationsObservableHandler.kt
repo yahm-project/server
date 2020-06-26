@@ -1,4 +1,4 @@
-package it.unibo.yahm.server.controllers
+package it.unibo.yahm.server.handlers
 
 import it.unibo.yahm.server.controllers.RoadsController.PositionAndObstacleType
 import it.unibo.yahm.server.entities.Coordinate
@@ -21,9 +21,9 @@ import reactor.core.scheduler.Schedulers
  * @property mapServices manage requests to OpenStreetMap Api.
  * @property queriesManager bunch of queries.
  */
-class InputStreamLegController(private val streamToObserve: EmitterProcessor<Evaluations>,
-                               private val mapServices: MapServices,
-                               private val queriesManager: DBQueries) {
+class AddEvaluationsObservableHandler(private val streamToObserve: EmitterProcessor<Evaluations>,
+                                      private val mapServices: MapServices,
+                                      private val queriesManager: DBQueries) {
 
     /**
      * Observe the stream in order to insert incoming data on the DB.
@@ -97,16 +97,13 @@ class InputStreamLegController(private val streamToObserve: EmitterProcessor<Eva
         fun getObstacleTypeToRelativeDistances(distanceFromPoints: Double,
                                                obstaclesAdjacentPoints:  Map<Pair<Long, Long>, MutableList<OnRoadObstacle>>,
                                                fromNodeToNode: Pair<Node, Node>): MutableMap<String, MutableList<Double>>{
-            val startEndDistancesAndObstacles = getObstacleDistanceFromStartAndType(obstaclesAdjacentPoints, fromNodeToNode)
+
+            val startNodeDistancesAndObstacles = getObstacleDistanceFromStartAndType(obstaclesAdjacentPoints, fromNodeToNode)
             val obstacleTypeToRelativeDistances: MutableMap<String, MutableList<Double>> = mutableMapOf()
-            startEndDistancesAndObstacles.forEach { obstacleTypeAndDistance ->
+            startNodeDistancesAndObstacles.forEach { obstacleTypeAndDistance ->
                 val relativeDistance = obstacleTypeAndDistance.second / distanceFromPoints
-                val actualStoredDistances = obstacleTypeToRelativeDistances
-                        .putIfAbsent(obstacleTypeAndDistance.first.toString(), mutableListOf(relativeDistance))
-                if (actualStoredDistances != null) {
-                    actualStoredDistances.add(relativeDistance)
-                    obstacleTypeToRelativeDistances[obstacleTypeAndDistance.first.toString()] = actualStoredDistances
-                }
+                obstacleTypeToRelativeDistances
+                        .putIfAbsent(obstacleTypeAndDistance.first.toString(), mutableListOf(relativeDistance))?.add(relativeDistance)
             }
             return obstacleTypeToRelativeDistances
         }

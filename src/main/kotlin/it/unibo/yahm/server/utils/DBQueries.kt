@@ -1,6 +1,6 @@
 package it.unibo.yahm.server.utils
 
-import it.unibo.yahm.server.controllers.InputStreamLegController
+import it.unibo.yahm.server.handlers.AddEvaluationsObservableHandler
 import it.unibo.yahm.server.entities.*
 import org.neo4j.driver.Record
 import org.neo4j.driver.summary.ResultSummary
@@ -31,10 +31,10 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
                 return if (obstaclesMapToOptionalString.isPresent) {
                     val obstaclesMapToString = obstaclesMapToOptionalString.get()
                     "ON CREATE SET s = {quality: $qualityValue, $obstaclesMapToString \n}" +
-                            "ON MATCH SET s = {quality: s.quality * (1 - ${InputStreamLegController.NEW_QUALITY_WEIGHT}) + $qualityValue * ${InputStreamLegController.NEW_QUALITY_WEIGHT}, $obstaclesMapToString}"
+                            "ON MATCH SET s = {quality: s.quality * (1 - ${AddEvaluationsObservableHandler.NEW_QUALITY_WEIGHT}) + $qualityValue * ${AddEvaluationsObservableHandler.NEW_QUALITY_WEIGHT}, $obstaclesMapToString}"
                 } else {
                     "ON CREATE SET s = {quality: $qualityValue\n}" +
-                            "ON MATCH SET s = {quality: s.quality * (1 - ${InputStreamLegController.NEW_QUALITY_WEIGHT}) + $qualityValue * ${InputStreamLegController.NEW_QUALITY_WEIGHT}}"
+                            "ON MATCH SET s = {quality: s.quality * (1 - ${AddEvaluationsObservableHandler.NEW_QUALITY_WEIGHT}) + $qualityValue * ${AddEvaluationsObservableHandler.NEW_QUALITY_WEIGHT}}"
                 }
             }
 
