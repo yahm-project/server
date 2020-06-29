@@ -5,7 +5,7 @@ import it.unibo.yahm.server.entities.Node
 import it.unibo.yahm.server.entities.ObstacleType
 import it.unibo.yahm.server.utils.DBQueries
 import it.unibo.yahm.server.utils.TestUtils
-import it.unibo.yahm.server.utils.calculateIntermediatePoint
+import it.unibo.yahm.server.utils.GeographiUtils.calculateIntermediatePoint
 import org.junit.FixMethodOrder
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach

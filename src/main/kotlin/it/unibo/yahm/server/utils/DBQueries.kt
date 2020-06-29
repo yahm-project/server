@@ -10,7 +10,7 @@ import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import java.util.*
 import kotlin.math.round
-
+import it.unibo.yahm.server.utils.GeographiUtils.calculateIntermediatePoint
 
 class DBQueries(private val client: ReactiveNeo4jClient) {
     private fun obstaclesMapToString(obstacles: Map<String, List<Double>>): Optional<String> {

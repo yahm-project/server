@@ -1,7 +1,7 @@
 package it.unibo.yahm.server.controllers
 
 import it.unibo.yahm.server.handlers.AddEvaluationsObservableHandler
-import it.unibo.yahm.server.utils.aggregateDistances
+import it.unibo.yahm.server.utils.GeographiUtils.aggregateDistances
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 

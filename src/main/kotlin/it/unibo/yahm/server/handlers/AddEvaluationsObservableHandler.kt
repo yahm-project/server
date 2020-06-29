@@ -8,7 +8,7 @@ import it.unibo.yahm.server.entities.ObstacleType
 import it.unibo.yahm.server.maps.MapServices
 import it.unibo.yahm.server.maps.NearestService
 import it.unibo.yahm.server.utils.DBQueries
-import it.unibo.yahm.server.utils.aggregateDistances
+import it.unibo.yahm.server.utils.GeographiUtils.aggregateDistances
 import reactor.core.publisher.EmitterProcessor
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
