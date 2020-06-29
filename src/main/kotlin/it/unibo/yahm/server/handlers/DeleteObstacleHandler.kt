@@ -4,72 +4,43 @@ import it.unibo.yahm.server.entities.Coordinate
 import it.unibo.yahm.server.entities.ObstacleType
 import it.unibo.yahm.server.utils.DBQueries
 import reactor.core.publisher.Mono
-import java.util.*
 import kotlin.math.abs
-import kotlin.math.pow
-import kotlin.math.roundToInt
 
 
 class DeleteObstacleHandler(private val queriesManager: DBQueries) {
 
-    data class RelativeDistances(
-            val distanceFromFirstNode: Double,
-            val distanceFromSecondNode: Double
-    )
+    data class RelativeDistances(val distanceFromFirstNode: Double, val distanceFromSecondNode: Double)
 
-    fun deleteObstacle(latitude: Double,
-                       longitude: Double,
-                       obstacleType: ObstacleType,
-                       legFromId: Long,
-                       legToId: Long): Mono<Boolean> {
-        val obstacleCoordinate = Coordinate(latitude, longitude)
-        val relativeDistances = getRelativeDistanceFromNodes(legFromId,
-                legToId,
-                obstacleCoordinate)
-        if (relativeDistances.isPresent) {
-            return queriesManager.getLegObstacleTypeToDistance(legFromId, legToId).flatMap { obstacleToDistance ->
-                removeObstacleFromLegAndUpdateDB(
-                        obstacleToDistance,
-                        relativeDistances.get().distanceFromFirstNode,
-                        legFromId,
-                        legToId,
-                        obstacleType.toString()
-                ).flatMap {
-                    //the obstacle wasn't in the leg from firstnode to second node
-                    if (!it) {
-                        queriesManager.getLegObstacleTypeToDistance(legToId, legFromId).flatMap { obstacleToDistance ->
-                            removeObstacleFromLegAndUpdateDB(
-                                    obstacleToDistance,
-                                    relativeDistances.get().distanceFromSecondNode,
-                                    legToId,
-                                    legFromId,
-                                    obstacleType.toString()
-                            )
-                        }
-                    } else {
-                        Mono.just(true)
-                    }
-                }
-            }
+    fun deleteObstacle(coordinate: Coordinate, obstacleType: ObstacleType, legFromId: Long, legToId: Long): Mono<Boolean> {
+
+        fun tryRemoveObstacle(first: Long, second: Long, distance: Double): Mono<Boolean> {
+            return queriesManager.getLegObstacles(first, second).flatMap {
+                removeObstacleFromLegAndUpdateDB(it, distance, first, second, obstacleType.toString())
+            }.switchIfEmpty(Mono.just(false))
         }
-        return Mono.just(false)
+
+        val relativeDistances = getRelativeDistanceFromNodes(legFromId, legToId, coordinate)
+        return if (relativeDistances != null) {
+            Mono.zip(
+                tryRemoveObstacle(legFromId, legToId, relativeDistances.distanceFromFirstNode),
+                tryRemoveObstacle(legToId, legFromId, relativeDistances.distanceFromSecondNode)
+            ).map { it.t1 || it.t2 }
+        } else {
+            Mono.just(false)
+        }
     }
 
     private fun getRelativeDistanceFromNodes(firstNodeId: Long, secondNodeId: Long, obstacleCoordinate: Coordinate):
-            Optional<RelativeDistances> {
+            RelativeDistances? {
         val firstNode = queriesManager.getNodeByNeo4jId(firstNodeId).block()
         val secondNode = queriesManager.getNodeByNeo4jId(secondNodeId).block()
-        return if (firstNode != null && secondNode != null) {
-            val relativeDistanceFromFirstNode = firstNode
-                    .coordinates
-                    .distanceTo(obstacleCoordinate) / firstNode.coordinates.distanceTo(secondNode.coordinates)
-            val relativeDistanceFromSecondNode = secondNode
-                    .coordinates
-                    .distanceTo(obstacleCoordinate) / secondNode.coordinates.distanceTo(firstNode.coordinates)
-            Optional.of(RelativeDistances(relativeDistanceFromFirstNode, relativeDistanceFromSecondNode))
-        } else {
-            Optional.empty()
+        if (firstNode != null && secondNode != null) {
+            val legLength = firstNode.coordinates.distanceTo(secondNode.coordinates)
+            val relativeDistanceFromFirstNode = firstNode.coordinates.distanceTo(obstacleCoordinate) / legLength
+            val relativeDistanceFromSecondNode = secondNode.coordinates.distanceTo(obstacleCoordinate) / legLength
+            return RelativeDistances(relativeDistanceFromFirstNode, relativeDistanceFromSecondNode)
         }
+        return null
     }
 
     private fun removeObstacleFromLegAndUpdateDB(obstaclesMap: Map<String, List<Double>>,
@@ -77,19 +48,17 @@ class DeleteObstacleHandler(private val queriesManager: DBQueries) {
                                                  firstNodeId: Long,
                                                  secondNodeId: Long,
                                                  obstacleType: String): Mono<Boolean> {
-        if (obstaclesMap.containsKey(obstacleType)) {
-            val obstaclesDistances = obstaclesMap[obstacleType]!!
-            val newObstacles = removeElementFromListIfPresent(obstaclesDistances, relativeDistanceFromNode)
-            return if (obstaclesDistances.size != newObstacles.size) {
-                queriesManager.updateLegObstacles(firstNodeId, secondNodeId, Pair(obstacleType, newObstacles)).map { true }
-            } else {
-                Mono.just(false)
+        val obstaclesDistances = obstaclesMap[obstacleType]
+        if (obstaclesDistances != null) {
+            val newObstacles = removeFirstDoubleEquals(obstaclesDistances, relativeDistanceFromNode)
+            if (obstaclesDistances.size != newObstacles.size) {
+                return queriesManager.updateLegObstacles(firstNodeId, secondNodeId, Pair(obstacleType, newObstacles)).map { true }
             }
         }
         return Mono.just(false)
     }
 
-    private fun removeElementFromListIfPresent(initialList: List<Double>, element: Double): List<Double> {
+    private fun removeFirstDoubleEquals(initialList: List<Double>, element: Double): List<Double> {
         val index = initialList.indexOfFirst { abs(it - element) < 0.000001 }
         if (index >= 0) {
             return initialList.toMutableList().apply {

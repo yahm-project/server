@@ -55,27 +55,17 @@ class DBQueries(private val client: ReactiveNeo4jClient) {
                 .run()
     }
 
-    fun getLegObstacleTypeToDistance(firstNodeId: Long, secondNodeId: Long): Mono<Map<String, List<Double>>> {
-
-        fun mapObstacleTypeToDistance(record: Record): Map<String, List<Double>> {
-            val toReturnMap = mutableMapOf<String, List<Double>>()
-            val leg = record["leg"].asRelationship()
-            ObstacleType.values().forEach { obstacleType ->
-                val optionalRelativeDistances = leg[obstacleType.toString()]
-                if (!optionalRelativeDistances.isNull) {
-                    toReturnMap[obstacleType.toString()] = optionalRelativeDistances.asList { it.asDouble() }
-                }
-
-            }
-            return toReturnMap
-        }
-
+    fun getLegObstacles(firstNodeId: Long, secondNodeId: Long): Mono<Map<String, List<Double>>> {
         return client.query("MATCH (a:Node)-[leg:LEG]->(b:Node) WHERE ID(a) = $firstNodeId AND ID(b) = $secondNodeId RETURN leg")
-                .fetchAs<Map<String, List<Double>>>()
-                .mappedBy { _, record ->
-                    mapObstacleTypeToDistance(record)
-                }
-                .first()
+            .fetchAs<Map<String, List<Double>>>()
+            .mappedBy { _, record ->
+                val leg = record["leg"].asRelationship()
+                ObstacleType.values().filterNot { leg[it.name].isNull }.map {
+                    it.toString() to leg[it.name].asList {v ->
+                        v.asDouble()
+                    }
+                }.toMap()
+            }.first()
     }
 
     fun getNodeByNeo4jId(id: Long): Mono<Node> {

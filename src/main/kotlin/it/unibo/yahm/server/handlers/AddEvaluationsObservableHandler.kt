@@ -116,7 +116,7 @@ class AddEvaluationsObservableHandler(private val streamToObserve: EmitterProces
         val distanceFromPoints = fromNodeToNode.first.coordinates.distanceTo(fromNodeToNode.second.coordinates)
         val obstacleTypeToRelativeDistances =
                 getObstacleTypeToRelativeDistances(distanceFromPoints, obstaclesAdjacentPoints, fromNodeToNode)
-        return queriesManager.getLegObstacleTypeToDistance(fromNodeToNode.first.id!!, fromNodeToNode.second.id!!)
+        return queriesManager.getLegObstacles(fromNodeToNode.first.id!!, fromNodeToNode.second.id!!)
                 .subscribeOn(Schedulers.newSingle("obstacle-updater"))
                 .switchIfEmpty(Mono.just(mapOf()))
                 .map { onDBDistances ->

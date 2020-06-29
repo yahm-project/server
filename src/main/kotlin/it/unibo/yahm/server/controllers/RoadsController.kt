@@ -39,7 +39,7 @@ class RoadsController(client: ReactiveNeo4jClient, service: MapServices) {
                        @RequestParam obstacleType: ObstacleType,
                        @RequestParam legFromId: Long,
                        @RequestParam legToId: Long): Mono<Boolean> {
-        return deleteObstacleHandler.deleteObstacle(latitude, longitude, obstacleType, legFromId, legToId)
+        return deleteObstacleHandler.deleteObstacle(Coordinate(latitude, longitude), obstacleType, legFromId, legToId)
     }
 
     @PostMapping("/evaluations")
